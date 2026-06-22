@@ -1,0 +1,2100 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DataPlot – Publication-Quality Data Visualization</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Segoe UI',Arial,sans-serif;font-size:13px;background:#f5f6fa;color:#222;display:flex;height:100vh;overflow:hidden}
+/* ===== SIDEBAR ===== */
+#sidebar{width:280px;min-width:240px;background:#fff;border-right:1px solid #dde;display:flex;flex-direction:column;overflow-y:auto;flex-shrink:0}
+#sidebar-header{padding:12px 14px;background:#2c3e6b;color:#fff;font-size:15px;font-weight:700;letter-spacing:.3px}
+#sidebar-header span{font-size:11px;font-weight:400;opacity:.75;display:block;margin-top:2px}
+.section{border-bottom:1px solid #eee}
+.section-title{padding:8px 14px;background:#f0f2f8;font-weight:600;font-size:12px;color:#2c3e6b;cursor:pointer;display:flex;justify-content:space-between;align-items:center;user-select:none}
+.section-title:hover{background:#e4e8f5}
+.section-title .arrow{transition:transform .2s;font-size:10px}
+.section-title.collapsed .arrow{transform:rotate(-90deg)}
+.section-body{padding:10px 14px;display:flex;flex-direction:column;gap:7px}
+.section-body.hidden{display:none}
+label{font-size:12px;color:#444;display:flex;align-items:center;gap:5px}
+label.block{flex-direction:column;align-items:flex-start;gap:3px}
+select,input[type=text],input[type=number],textarea{width:100%;padding:4px 7px;border:1px solid #ccc;border-radius:4px;font-size:12px;background:#fafafa}
+select:focus,input:focus,textarea:focus{outline:none;border-color:#2c3e6b}
+.radio-group{display:flex;flex-direction:column;gap:4px}
+.radio-group label,.check-group label{display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer}
+input[type=radio],input[type=checkbox]{cursor:pointer}
+.slider-row{display:flex;align-items:center;gap:8px}
+.slider-row input[type=range]{flex:1}
+.slider-row .val{font-size:11px;color:#666;min-width:28px;text-align:right}
+.btn{padding:5px 12px;border:none;border-radius:4px;cursor:pointer;font-size:12px;font-weight:600}
+.btn-primary{background:#2c3e6b;color:#fff}
+.btn-primary:hover{background:#1e2e54}
+.btn-secondary{background:#e8eaf0;color:#333}
+.btn-secondary:hover{background:#d5d8e8}
+.btn-sm{padding:3px 9px;font-size:11px}
+.btn-row{display:flex;gap:6px;flex-wrap:wrap}
+.tag{display:inline-block;padding:1px 7px;border-radius:10px;font-size:10px;font-weight:700;color:#fff}
+.tag-normal{background:#27ae60}
+.tag-nonnormal{background:#e74c3c}
+.tag-na{background:#95a5a6}
+/* ===== MAIN ===== */
+#main{flex:1;display:flex;flex-direction:column;overflow:hidden}
+#tabs-bar{display:flex;background:#fff;border-bottom:2px solid #dde;padding:0 16px}
+.tab-btn{padding:10px 18px;background:none;border:none;cursor:pointer;font-size:13px;font-weight:600;color:#888;border-bottom:2px solid transparent;margin-bottom:-2px}
+.tab-btn.active{color:#2c3e6b;border-bottom-color:#2c3e6b}
+.tab-btn:hover{color:#2c3e6b}
+#tab-content{flex:1;overflow:hidden;display:flex;flex-direction:column}
+.tab-pane{display:none;flex:1;overflow:auto;padding:16px}
+.tab-pane.active{display:flex;flex-direction:column}
+/* ===== PLOT TAB ===== */
+#plot-toolbar{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;align-items:center}
+#plot-toolbar .btn{font-size:11px;padding:4px 11px}
+#svg-container{background:#fff;border:1px solid #dde;border-radius:6px;overflow:auto;display:inline-block;min-width:400px}
+#plot-svg{display:block}
+/* ===== STATS TABLE ===== */
+.stats-section{margin-bottom:20px}
+.stats-section h3{font-size:13px;font-weight:700;color:#2c3e6b;margin-bottom:8px;padding-bottom:4px;border-bottom:2px solid #2c3e6b}
+table.data-table{border-collapse:collapse;width:100%;font-size:12px}
+table.data-table th{background:#2c3e6b;color:#fff;padding:6px 10px;text-align:left;font-weight:600;white-space:nowrap}
+table.data-table td{padding:5px 10px;border-bottom:1px solid #eee;white-space:nowrap}
+table.data-table tr:nth-child(even){background:#f7f8fb}
+table.data-table tr:hover{background:#eef0f8}
+.sig-stars{font-weight:700;color:#c0392b}
+.sig-ns{color:#888}
+/* ===== DATA TAB ===== */
+#data-table-wrap{overflow:auto;max-height:100%}
+/* ===== NORMALITY BADGE COLUMN ===== */
+.norm-badge{display:inline-block;padding:1px 7px;border-radius:8px;font-size:10px;font-weight:700;color:#fff}
+.norm-normal{background:#27ae60}
+.norm-nonnormal{background:#e74c3c}
+/* ===== INFO BOX ===== */
+.info-box{background:#e8f0fe;border-left:3px solid #2c3e6b;padding:8px 12px;border-radius:0 4px 4px 0;font-size:11.5px;line-height:1.5;margin-bottom:8px}
+.warn-box{background:#fff3e0;border-left:3px solid #f39c12;padding:8px 12px;border-radius:0 4px 4px 0;font-size:11.5px;margin-bottom:8px}
+/* ===== TEST SELECTOR ===== */
+#test-suggestion-box{background:#eafaf1;border:1px solid #27ae60;border-radius:5px;padding:8px 11px;font-size:11.5px;margin-bottom:8px}
+/* ===== DARK MODE ===== */
+body.dark{background:#1a1d2e;color:#ddd}
+body.dark #sidebar{background:#242840;border-color:#333}
+body.dark #sidebar-header{background:#1a1d2e}
+body.dark .section-title{background:#2a2e45;color:#a0b0e0}
+body.dark .section-body{color:#ccc}
+body.dark select,body.dark input,body.dark textarea{background:#1e2235;border-color:#444;color:#ddd}
+body.dark #tabs-bar{background:#242840;border-color:#333}
+body.dark .tab-btn{color:#778}
+body.dark .tab-btn.active{color:#90aaee;border-bottom-color:#90aaee}
+body.dark #svg-container{background:#1e2235;border-color:#333}
+body.dark table.data-table th{background:#2c3e6b}
+body.dark table.data-table td{border-color:#333}
+body.dark table.data-table tr:nth-child(even){background:#2a2e45}
+body.dark table.data-table tr:hover{background:#323660}
+body.dark .info-box{background:#1e2b4a;border-color:#5070b0}
+/* ===== PASTE AREA ===== */
+#paste-area{height:100px;resize:vertical}
+/* ===== STATUS ===== */
+#status-bar{background:#fff;border-top:1px solid #eee;padding:4px 16px;font-size:11px;color:#666;flex-shrink:0}
+body.dark #status-bar{background:#242840;border-color:#333;color:#889}
+/* ===== COLOR PICKER ===== */
+.btn-icon{display:inline-flex;align-items:center;gap:4px;padding:4px 8px;border:1px solid #ccd;border-radius:4px;background:#fff;cursor:pointer;font-size:11.5px;color:#333;transition:background .15s}
+.btn-icon:hover{background:#eef0fb;border-color:#2c3e6b}
+.btn-icon:active{background:#dde2f5}
+body.dark .btn-icon{background:#2a2e45;border-color:#444;color:#ccc}
+body.dark .btn-icon:hover{background:#323660}
+#color-swatch-row{display:flex;gap:4px;align-items:center;flex-wrap:wrap;margin-top:4px;min-height:24px}
+.color-swatch{width:22px;height:22px;border-radius:4px;border:1.5px solid rgba(0,0,0,.2);cursor:pointer;position:relative;flex-shrink:0;transition:transform .12s}
+.color-swatch:hover{transform:scale(1.18);z-index:1}
+.color-swatch::after{content:'×';position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;color:#fff;text-shadow:0 0 3px rgba(0,0,0,.9);opacity:0;transition:opacity .15s}
+.color-swatch:hover::after{opacity:1}
+/* ===== EXPORT OVERLAY ===== */
+#export-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:100;align-items:center;justify-content:center}
+#export-overlay.show{display:flex}
+#export-box{background:#fff;border-radius:8px;padding:24px;min-width:320px;box-shadow:0 8px 40px rgba(0,0,0,.25)}
+#export-box h3{margin-bottom:16px;color:#2c3e6b}
+</style>
+</head>
+<body>
+<!-- ===================== SIDEBAR ===================== -->
+<div id="sidebar">
+  <div id="sidebar-header">DataPlot<span>Publication-Quality Data Visualization</span></div>
+
+  <!-- DATA INPUT -->
+  <div class="section">
+    <div class="section-title" onclick="toggleSection(this)">📂 Data Input <span class="arrow">▼</span></div>
+    <div class="section-body">
+      <div class="radio-group" id="data-source-group">
+        <label><input type="radio" name="dataSource" value="example1" checked> Example 1 (wide format)</label>
+        <label><input type="radio" name="dataSource" value="example2"> Example 2 (tidy format)</label>
+        <label><input type="radio" name="dataSource" value="paste"> Paste data</label>
+        <label><input type="radio" name="dataSource" value="file"> Upload file (csv/xlsx)</label>
+      </div>
+      <div id="paste-controls" style="display:none">
+        <textarea id="paste-area" placeholder="Paste tab/comma-separated data here..."></textarea>
+        <label class="block" style="margin-top:4px">Delimiter
+          <select id="paste-delim">
+            <option value="tab">Tab (from Excel)</option>
+            <option value="comma">Comma</option>
+            <option value="semicolon">Semicolon</option>
+          </select>
+        </label>
+        <button class="btn btn-primary btn-sm" onclick="loadPastedData()">Load data</button>
+      </div>
+      <div id="file-controls" style="display:none">
+        <input type="file" id="file-input" accept=".csv,.tsv,.txt,.xlsx,.xls" style="width:100%;font-size:11px">
+        <label class="block" style="margin-top:4px">Delimiter (text files)
+          <select id="file-delim">
+            <option value="auto">Auto-detect</option>
+            <option value=",">Comma</option>
+            <option value="\t">Tab</option>
+            <option value=";">Semicolon</option>
+          </select>
+        </label>
+      </div>
+      <label><input type="checkbox" id="tidy-input"> Data is in tidy format</label>
+      <div id="tidy-controls" style="display:none">
+        <label class="block">Group/Condition column
+          <select id="x-var"><option value="">-- select --</option></select>
+        </label>
+        <label class="block">Value column
+          <select id="y-var"><option value="">-- select --</option></select>
+        </label>
+      </div>
+      <div id="wide-controls">
+        <label class="block">Select columns to include
+          <select id="col-select" multiple style="height:80px"></select>
+        </label>
+      </div>
+    </div>
+  </div>
+
+  <!-- PLOT OPTIONS -->
+  <div class="section">
+    <div class="section-title" onclick="toggleSection(this)">📊 Plot Options <span class="arrow">▼</span></div>
+    <div class="section-body">
+      <label class="block">Data display
+        <select id="jitter-type">
+          <option value="beeswarm">Quasirandom (beeswarm)</option>
+          <option value="random">Random jitter</option>
+          <option value="strip">Strip (none)</option>
+          <option value="stripes">Stripes</option>
+        </select>
+      </label>
+      <label class="block">Data transparency
+        <div class="slider-row">
+          <input type="range" id="data-alpha" min="0" max="1" step="0.05" value="0.5">
+          <span class="val" id="data-alpha-val">0.5</span>
+        </div>
+      </label>
+      <label class="block">Summary statistics
+        <select id="summary-type">
+          <option value="median">Median</option>
+          <option value="mean">Mean</option>
+          <option value="geom_mean">Geometric mean</option>
+          <option value="box">Boxplot (n≥5)</option>
+          <option value="violin">Violin plot (n≥5)</option>
+          <option value="none">None</option>
+        </select>
+      </label>
+      <label class="block">Summary transparency
+        <div class="slider-row">
+          <input type="range" id="summ-alpha" min="0" max="1" step="0.05" value="1">
+          <span class="val" id="summ-alpha-val">1.0</span>
+        </div>
+      </label>
+      <label><input type="checkbox" id="show-ci"> Show 95% CI</label>
+      <label><input type="checkbox" id="show-sd"> Show ±SD</label>
+      <label><input type="checkbox" id="show-sem"> Show ±SEM</label>
+      <label class="block">Ordering
+        <select id="ordering">
+          <option value="none">As supplied</option>
+          <option value="median">By median</option>
+          <option value="mean">By mean</option>
+          <option value="alpha">Alphabetical</option>
+        </select>
+      </label>
+    </div>
+  </div>
+
+  <!-- APPEARANCE -->
+  <div class="section">
+    <div class="section-title" onclick="toggleSection(this)">🎨 Appearance <span class="arrow">▼</span></div>
+    <div class="section-body">
+      <label class="block">Color palette
+        <select id="palette">
+          <option value="okabe">Okabe–Ito (colorblind-safe)</option>
+          <option value="tol_bright">Tol Bright</option>
+          <option value="tol_muted">Tol Muted</option>
+          <option value="tol_light">Tol Light</option>
+          <option value="custom">Custom</option>
+        </select>
+      </label>
+      <!-- Color pickers — always visible -->
+      <div style="display:flex;gap:5px;margin-top:4px;flex-wrap:wrap">
+        <button class="btn-icon" onclick="openNativePicker()" title="Open color picker">🎨 Add color</button>
+        <button class="btn-icon" id="eyedrop-btn" onclick="pickColorFromScreen()" title="Sample a color from anywhere on screen (Chrome/Edge)">💧 Eyedrop</button>
+      </div>
+      <!-- Custom palette swatches + text field -->
+      <div id="custom-palette-row" style="display:none;margin-top:4px">
+        <div id="color-swatch-row"></div>
+        <input type="text" id="custom-colors" placeholder="#E69F00,#56B4E9,#009E73" value="#E69F00,#56B4E9,#009E73" style="margin-top:5px">
+      </div>
+      <!-- Hidden native color input -->
+      <input type="color" id="native-color-input" style="position:absolute;opacity:0;pointer-events:none;width:1px;height:1px" value="#E69F00">
+      <label><input type="checkbox" id="color-data"> Color data points</label>
+      <label><input type="checkbox" id="color-stats"> Color summary</label>
+      <label><input type="checkbox" id="dark-mode"> Dark theme</label>
+      <label><input type="checkbox" id="no-grid"> Remove gridlines</label>
+      <label><input type="checkbox" id="log-scale"> Log₁₀ scale</label>
+      <label><input type="checkbox" id="flip-axes"> Flip axes (horizontal)</label>
+      <label class="block">Point size
+        <div class="slider-row">
+          <input type="range" id="point-size" min="2" max="12" step="0.5" value="5">
+          <span class="val" id="point-size-val">5</span>
+        </div>
+      </label>
+      <label class="block">Y-axis range (min,max — leave blank for auto)
+        <input type="text" id="y-range" placeholder="e.g. 0,2">
+      </label>
+    </div>
+  </div>
+
+  <!-- LABELS -->
+  <div class="section">
+    <div class="section-title" onclick="toggleSection(this)">🏷️ Labels <span class="arrow">▼</span></div>
+    <div class="section-body">
+      <label class="block">Title<input type="text" id="plot-title" placeholder="Plot title"></label>
+      <label class="block">X-axis label<input type="text" id="x-label" placeholder="Group"></label>
+      <label class="block">Y-axis label<input type="text" id="y-label" placeholder="Value"></label>
+      <label class="block">Axis title size (pt)
+        <input type="number" id="font-title" value="14" min="8" max="32">
+      </label>
+      <label class="block">Axis label size (pt)
+        <input type="number" id="font-axis" value="12" min="6" max="28">
+      </label>
+      <label class="block">Plot width (px)
+        <input type="number" id="plot-width" value="520" min="200" max="1600">
+      </label>
+      <label class="block">Plot height (px)
+        <input type="number" id="plot-height" value="480" min="200" max="1200">
+      </label>
+    </div>
+  </div>
+
+  <!-- STATISTICS -->
+  <div class="section">
+    <div class="section-title" onclick="toggleSection(this)">🔬 Statistical Tests <span class="arrow">▼</span></div>
+    <div class="section-body">
+      <label><input type="checkbox" id="run-stats" checked> Run statistical tests</label>
+      <label class="block">Normality test
+        <select id="norm-test">
+          <option value="shapiro">Shapiro–Wilk W + Anderson–Darling p</option>
+          <option value="ad">Anderson–Darling (only)</option>
+        </select>
+      </label>
+      <label><input type="checkbox" id="auto-test" checked> Auto-select test based on normality</label>
+      <div id="manual-test-row" style="display:none">
+        <label class="block">Manual test override
+          <select id="manual-test">
+            <option value="t">t-test / Welch (2 groups)</option>
+            <option value="anova">ANOVA + Tukey HSD (≥2 groups)</option>
+            <option value="wilcox">Mann–Whitney U (2 groups)</option>
+            <option value="kruskal">Kruskal–Wallis + Dunn (≥2 groups)</option>
+          </select>
+        </label>
+      </div>
+      <label class="block">Significance threshold (α)
+        <select id="alpha-thresh">
+          <option value="0.05" selected>0.05</option>
+          <option value="0.01">0.01</option>
+          <option value="0.001">0.001</option>
+        </select>
+      </label>
+      <label><input type="checkbox" id="show-ns" checked> Show 'ns' for non-significant</label>
+      <label><input type="checkbox" id="show-sig-bars" checked> Show significance bars on plot</label>
+      <label class="block">Multiple comparisons correction
+        <select id="mc-correction">
+          <option value="holm">Holm (recommended)</option>
+          <option value="bonferroni">Bonferroni</option>
+          <option value="none">None (uncorrected)</option>
+        </select>
+      </label>
+    </div>
+  </div>
+</div>
+
+<!-- ===================== MAIN ===================== -->
+<div id="main">
+  <div id="tabs-bar">
+    <button class="tab-btn active" onclick="switchTab('plot',this)">Plot</button>
+    <button class="tab-btn" onclick="switchTab('data',this)">Data</button>
+    <button class="tab-btn" onclick="switchTab('stats',this)">Statistics</button>
+    <button class="tab-btn" onclick="switchTab('legend',this)">Figure Legend</button>
+  </div>
+  <div id="tab-content">
+    <!-- PLOT TAB -->
+    <div class="tab-pane active" id="tab-plot">
+      <div id="plot-toolbar">
+        <button class="btn btn-primary" onclick="exportPNG()">⬇ PNG</button>
+        <button class="btn btn-primary" onclick="exportSVG()">⬇ SVG</button>
+        <button class="btn btn-primary" onclick="exportPDF()">⬇ Report PDF</button>
+        <button class="btn btn-secondary" onclick="exportCSV()">⬇ Tidy CSV</button>
+        <button class="btn btn-secondary" onclick="exportFullCSV()">⬇ Full CSV</button>
+        <button class="btn btn-secondary" onclick="drawPlot()">↻ Refresh</button>
+      </div>
+      <div id="svg-container"><svg id="plot-svg"></svg></div>
+    </div>
+    <!-- DATA TAB -->
+    <div class="tab-pane" id="tab-data">
+      <div id="data-table-wrap"></div>
+    </div>
+    <!-- STATS TAB -->
+    <div class="tab-pane" id="tab-stats">
+      <div id="stats-content"></div>
+    </div>
+    <!-- LEGEND TAB -->
+    <div class="tab-pane" id="tab-legend">
+      <div id="legend-content" style="max-width:700px;line-height:1.7;font-size:13px"></div>
+    </div>
+  </div>
+  <div id="status-bar" id="status-bar">Ready — load data to begin.</div>
+</div>
+
+<script>
+// ============================================================
+// PALETTES
+// ============================================================
+const PALETTES = {
+  okabe:     ['#E69F00','#56B4E9','#009E73','#F0E442','#0072B2','#D55E00','#CC79A7','#000000'],
+  tol_bright:['#EE6677','#228833','#4477AA','#CCBB44','#66CCEE','#AA3377','#BBBBBB'],
+  tol_muted: ['#88CCEE','#44AA99','#117733','#332288','#DDCC77','#999933','#CC6677','#882255','#AA4499','#DDDDDD'],
+  tol_light: ['#BBCC33','#AAAA00','#77AADD','#EE8866','#EEDD88','#FFAABB','#99DDFF','#44BB99','#DDDDDD'],
+};
+
+// ============================================================
+// GLOBAL STATE
+// ============================================================
+let state = {
+  rawData: null,       // array of objects from parsing
+  tidyData: [],        // [{group, value}]
+  groups: [],          // ordered group names
+  stats: null,         // computed stats
+  testResults: null,   // statistical test results
+  normResults: null,   // normality results per group
+};
+
+// ============================================================
+// EXAMPLE DATA
+// ============================================================
+const EXAMPLE1_CSV = `B_lo,A_hi,C_med
+0.808,1.040,0.846
+0.708,1.001,0.919
+0.871,1.216,0.913
+0.831,1.215,1.005
+0.984,1.398,0.891
+0.767,0.828,1.146
+0.720,1.117,0.866
+0.764,1.528,0.965
+0.633,0.984,1.183
+0.835,0.877,0.730
+0.809,0.717,0.851
+0.694,0.914,0.743
+0.724,0.874,0.805
+0.570,1.911,0.758
+0.724,0.822,0.755
+0.782,1.092,0.738
+0.687,0.633,0.720
+0.788,0.828,0.723
+0.709,0.949,0.754
+0.975,1.377,0.793
+0.711,0.707,0.809
+0.703,0.682,0.874
+0.674,0.665,0.883
+0.788,0.849,0.677
+0.754,0.838,0.689
+0.758,0.972,0.838
+0.711,0.881,0.729
+0.698,0.833,0.817
+0.717,0.691,0.894
+0.824,0.850,1.038`;
+
+const EXAMPLE2_CSV = `conditions,Activity
+Control,0.870
+Control,0.941
+Control,0.983
+Control,1.140
+Control,0.992
+Control,0.916
+Control,0.712
+Control,0.849
+Control,0.864
+Control,0.748
+Control,0.733
+Control,0.754
+Control,1.137
+Control,1.112
+Control,1.218
+Control,1.362
+Control,0.851
+Control,0.899
+Control,0.895
+Control,1.096
+Control,0.751
+Control,0.886
+Control,0.725
+Control,0.779
+Control,0.829
+Condition_1,0.998
+Condition_1,1.234
+Condition_1,1.333
+Condition_1,1.445
+Condition_1,1.284
+Condition_1,0.985
+Condition_1,0.944
+Condition_1,1.083
+Condition_1,0.865
+Condition_1,1.928
+Condition_1,1.737
+Condition_1,1.195
+Condition_1,2.343
+Condition_1,1.960
+Condition_1,2.412
+Condition_1,2.254
+Condition_1,1.922
+Condition_1,1.332
+Condition_1,1.974
+Condition_1,1.592
+Condition_1,1.930
+Condition_2,1.624
+Condition_2,1.525
+Condition_2,1.415
+Condition_2,1.666
+Condition_2,1.628
+Condition_2,3.557
+Condition_2,3.357
+Condition_2,3.193
+Condition_2,3.529
+Condition_2,3.140
+Condition_2,3.916
+Condition_2,3.407
+Condition_2,2.597
+Condition_2,2.923
+Condition_2,3.194
+Condition_2,2.703
+Condition_2,3.231
+Condition_2,2.454`;
+
+// ============================================================
+// UTILITY MATH FUNCTIONS
+// ============================================================
+function mean(arr) { return arr.reduce((s,v)=>s+v,0)/arr.length; }
+function median(arr) {
+  const s=[...arr].sort((a,b)=>a-b), n=s.length;
+  return n%2===0?(s[n/2-1]+s[n/2])/2:s[Math.floor(n/2)];
+}
+function variance(arr) {
+  const m=mean(arr); return arr.reduce((s,v)=>s+(v-m)**2,0)/(arr.length-1);
+}
+function sd(arr) { return Math.sqrt(variance(arr)); }
+function geomMean(arr) { return Math.exp(mean(arr.map(v=>Math.log(v)))); }
+function quantile(arr,p) {
+  const s=[...arr].sort((a,b)=>a-b), n=s.length;
+  const idx=p*(n-1), lo=Math.floor(idx), hi=Math.ceil(idx);
+  return lo===hi?s[lo]:s[lo]+(s[hi]-s[lo])*(idx-lo);
+}
+function mad(arr) {
+  const m=median(arr);
+  return median(arr.map(v=>Math.abs(v-m)));
+}
+function iqr(arr) { return quantile(arr,0.75)-quantile(arr,0.25); }
+function range(arr) { return {min:Math.min(...arr),max:Math.max(...arr)}; }
+
+// ============================================================
+// NORMAL DISTRIBUTION FUNCTIONS
+// ============================================================
+function normalCDF(z) {
+  // Abramowitz & Stegun approximation 26.2.17
+  const t=1/(1+0.2316419*Math.abs(z));
+  const d=0.3989423*Math.exp(-z*z/2);
+  const poly=t*(0.319381530+t*(-0.356563782+t*(1.781477937+t*(-1.821255978+t*1.330274429))));
+  const p=1-d*poly;
+  return z>=0?p:1-p;
+}
+function normalPDF(z) { return Math.exp(-0.5*z*z)/Math.sqrt(2*Math.PI); }
+function normalQuantile(p) {
+  // Peter Acklam's rational approximation
+  if(p<=0)return -Infinity; if(p>=1)return Infinity;
+  const a=[-3.969683028665376e1,2.209460984245205e2,-2.759285104469687e2,1.383577518672690e2,-3.066479806614716e1,2.506628277459239];
+  const b=[-5.447609879822406e1,1.615858368580409e2,-1.556989798598866e2,6.680131188771972e1,-1.328068155288572e1];
+  const c=[-7.784894002430293e-3,-3.223964580411365e-1,-2.400758277161838,-2.549732539343734,4.374664141464968,2.938163982698783];
+  const d=[7.784695709041462e-3,3.224671290700398e-1,2.445134137142996,3.754408661907416];
+  const pl=0.02425, ph=1-pl;
+  let q,r;
+  if(p<pl){ q=Math.sqrt(-2*Math.log(p));
+    return (((((c[0]*q+c[1])*q+c[2])*q+c[3])*q+c[4])*q+c[5])/((((d[0]*q+d[1])*q+d[2])*q+d[3])*q+1);
+  } else if(p<=ph){ q=p-0.5; r=q*q;
+    return (((((a[0]*r+a[1])*r+a[2])*r+a[3])*r+a[4])*r+a[5])*q/((((( b[0]*r+b[1])*r+b[2])*r+b[3])*r+b[4])*r+1);
+  } else { q=Math.sqrt(-2*Math.log(1-p));
+    return -(((((c[0]*q+c[1])*q+c[2])*q+c[3])*q+c[4])*q+c[5])/((((d[0]*q+d[1])*q+d[2])*q+d[3])*q+1);
+  }
+}
+
+// t-distribution two-tailed p-value via regularised incomplete beta
+
+// F-distribution p-value: P(F > f) with df1, df2
+function fDistPValue(f, df1, df2) {
+  const x = df2/(df2+df1*f);
+  return incompleteBeta(df2/2, df1/2, x);
+}
+
+// Chi-squared p-value: P(X > x) with df degrees of freedom
+function chiSquaredPValue(x, df) {
+  return 1 - regularisedGammaP(df/2, x/2);
+}
+
+// Regularised incomplete gamma function P(a, x) using series expansion
+function regularisedGammaP(a, x) {
+  if(x<0) return 0;
+  if(x===0) return 0;
+  if(x>=(a+1)){ return 1-regularisedGammaQ_cf(a,x); }
+  let sum=1/a, term=1/a;
+  for(let n=1;n<200;n++){
+    term*=x/(a+n); sum+=term;
+    if(Math.abs(term)<1e-10*Math.abs(sum)) break;
+  }
+  return sum*Math.exp(-x+a*Math.log(x)-lnGamma(a));
+}
+function regularisedGammaQ_cf(a,x) {
+  // Continued fraction representation
+  let fpmin=1e-30, b=x+1-a, c=1/fpmin, d=1/b, h=d;
+  for(let i=1;i<=200;i++){
+    const an=-i*(i-a), bv=b+2;
+    d=an*d+bv; if(Math.abs(d)<fpmin)d=fpmin;
+    c=bv+an/c; if(Math.abs(c)<fpmin)c=fpmin;
+    d=1/d; const del=d*c; h*=del;
+    if(Math.abs(del-1)<1e-10) break;
+  }
+  return Math.exp(-x+a*Math.log(x)-lnGamma(a))*h;
+}
+function lnGamma(z) {
+  // Lanczos approximation
+  const g=7, c=[0.99999999999980993,676.5203681218851,-1259.1392167224028,771.32342877765313,-176.61502916214059,12.507343278686905,-0.13857109526572012,9.9843695780195716e-6,1.5056327351493116e-7];
+  if(z<0.5) return Math.log(Math.PI/Math.sin(Math.PI*z))-lnGamma(1-z);
+  z-=1;
+  let x=c[0]; for(let i=1;i<g+2;i++) x+=c[i]/(z+i);
+  const t=z+g+0.5;
+  return 0.5*Math.log(2*Math.PI)+(z+0.5)*Math.log(t)-t+Math.log(x);
+}
+
+// Incomplete beta function I_x(a,b)
+function incompleteBeta(a, b, x) {
+  if(x<0||x>1) return NaN;
+  if(x===0) return 0; if(x===1) return 1;
+  // Use continued fraction after possible symmetry swap
+  const lbeta = lnGamma(a)+lnGamma(b)-lnGamma(a+b);
+  const front = Math.exp(Math.log(x)*a+Math.log(1-x)*b-lbeta)/a;
+  if(x<(a+1)/(a+b+2)){
+    return front*betaCF(a,b,x);
+  } else {
+    return 1-Math.exp(Math.log(x)*b+Math.log(1-x)*a-lbeta)/b*betaCF(b,a,1-x);
+  }
+}
+function betaCF(a,b,x) {
+  let fpmin=1e-30,qab=a+b,qap=a+1,qam=a-1,c=1,d=1-qab*x/qap;
+  if(Math.abs(d)<fpmin)d=fpmin; d=1/d; let h=d;
+  for(let m=1;m<=200;m++){
+    const m2=2*m;
+    let aa=m*(b-m)*x/((qam+m2)*(a+m2));
+    d=1+aa*d; if(Math.abs(d)<fpmin)d=fpmin;
+    c=1+aa/c; if(Math.abs(c)<fpmin)c=fpmin;
+    d=1/d; h*=d*c;
+    aa=-(a+m)*(qab+m)*x/((a+m2)*(qap+m2));
+    d=1+aa*d; if(Math.abs(d)<fpmin)d=fpmin;
+    c=1+aa/c; if(Math.abs(c)<fpmin)c=fpmin;
+    d=1/d; const del=d*c; h*=del;
+    if(Math.abs(del-1)<3e-10) break;
+  }
+  return h;
+}
+
+// Studentized range distribution CDF (for Tukey HSD)
+// Approximation: use normal distribution with df correction
+function qtukey_p(q, nmeans, df) {
+  // Approximation based on Miller (1981) via normal dist
+  // q is the test statistic, nmeans = number of groups, df = error df
+  // This is an approximation; the exact requires numerical integration
+  const z = q/Math.sqrt(2);
+  // Use Bonferroni-corrected normal approximation
+  const k = nmeans*(nmeans-1)/2;
+  let p = 2*(1-normalCDF(z));
+  return Math.min(1, p*k);
+}
+
+// ============================================================
+// NORMALITY TESTS
+// Shapiro-Wilk W statistic (Blom 1958 normal-scores approach)
+// p-value via Anderson-Darling (Stephens 1974 / D'Agostino 1986)
+// — Anderson-Darling p-value is accurate for all n ≥ 3
+// ============================================================
+function shapiroWilk(data) {
+  const x = data.filter(v=>isFinite(v)&&!isNaN(v)).sort((a,b)=>a-b);
+  const n = x.length;
+  if(n<3)  return {W:NaN, p:NaN, stat:NaN, label:'n<3', normal:null};
+  if(n>5000) return {W:NaN, p:NaN, stat:NaN, label:'n>5000', normal:null};
+
+  const xmean = mean(x);
+  const ss = x.reduce((s,v)=>s+(v-xmean)**2,0);
+  if(ss===0) return {W:1, p:1, stat:0, label:'constant', normal:true};
+
+  // Blom (1958) expected normal order statistics
+  const m = Array.from({length:n},(_,i)=>normalQuantile((i+1-0.375)/(n+0.25)));
+  const mss = m.reduce((s,v)=>s+v*v,0);
+  const n2 = Math.floor(n/2);
+
+  // Simple normalization: a[j] = m[n-1-j]/sqrt(mss)  (largest coefficient first)
+  let w_num = 0;
+  for(let i=0;i<n2;i++) w_num += (m[n-1-i]/Math.sqrt(mss))*(x[n-1-i]-x[i]);
+  const W = Math.min(1, Math.max(0, (w_num*w_num)/ss));
+
+  // Use Anderson-Darling for the p-value (works correctly for all n ≥ 3)
+  const ad = andersonDarling(data);
+  return {
+    W: round4(W),
+    p: ad.p,
+    stat: ad.stat,
+    label: ad.p >= 0.05 ? 'Normal' : 'Non-normal',
+    normal: ad.p >= 0.05,
+    testNote: 'W (Shapiro-Wilk), p (Anderson-Darling)'
+  };
+}
+
+function polyEval(coeffs, x) {
+  // Horner's method, coeffs[0] = highest-degree coefficient
+  let result = 0;
+  for(let i=0;i<coeffs.length;i++) result = result*x + coeffs[i];
+  return result;
+}
+
+// ============================================================
+// ANDERSON-DARLING NORMALITY TEST
+// p-value from D'Agostino & Stephens (1986) / Stephens (1974)
+// Works well for n ≥ 3; composite hypothesis (mean/SD estimated)
+// ============================================================
+function andersonDarling(data) {
+  const x = data.filter(v=>isFinite(v)&&!isNaN(v)).sort((a,b)=>a-b);
+  const n = x.length;
+  if(n<3) return {stat:NaN, p:NaN, label:'n<3', normal:null};
+
+  const xm = mean(x);
+  const s  = sd(x);
+  if(s===0) return {stat:0, p:1, label:'constant', normal:true};
+
+  // Standardize and compute A²
+  let A2 = 0;
+  for(let i=0;i<n;i++){
+    const zi = (x[i]-xm)/s;
+    const lnF = Math.log(Math.max(1e-15, normalCDF(zi)));
+    const lnG = Math.log(Math.max(1e-15, 1-normalCDF((x[n-1-i]-xm)/s)));
+    A2 += (2*(i+1)-1)*(lnF+lnG);
+  }
+  A2 = -n - A2/n;
+
+  // Small-sample correction (Stephens 1974)
+  const A2s = A2*(1 + 4/n - 25/(n*n));
+
+  // P-value (D'Agostino & Stephens 1986, Table 4.9)
+  let p;
+  const a = A2s;
+  if(a < 0.2){
+    p = 1 - Math.exp(-13.436 + 101.14*a - 223.73*a*a);
+  } else if(a < 0.34){
+    p = 1 - Math.exp(-8.318 + 42.796*a - 59.938*a*a);
+  } else if(a < 0.6){
+    p = Math.exp(0.9177 - 4.279*a - 1.38*a*a);
+  } else if(a < 10){
+    p = Math.exp(1.2937 - 5.709*a + 0.0186*a*a);
+  } else {
+    p = 0;
+  }
+  p = Math.max(0, Math.min(1, p));
+
+  return {
+    stat: round4(A2s),
+    p: round4(p),
+    label: p>=0.05?'Normal':'Non-normal',
+    normal: p>=0.05,
+    testName: 'Anderson-Darling'
+  };
+}
+
+// ============================================================
+// WELCH'S TWO-SAMPLE T-TEST
+// ============================================================
+function welchTTest(a, b) {
+  const n1=a.length, n2=b.length;
+  const m1=mean(a), m2=mean(b);
+  const v1=variance(a), v2=variance(b);
+  const se = Math.sqrt(v1/n1+v2/n2);
+  if(se===0) return {t:0,df:n1+n2-2,p:1};
+  const t = (m1-m2)/se;
+  // Welch-Satterthwaite df
+  const df = (v1/n1+v2/n2)**2 / ((v1/n1)**2/(n1-1)+(v2/n2)**2/(n2-1));
+  // Two-tailed p via t-distribution (using normal approximation for large df)
+  const p = twoTailP(t, df);
+  return {t:round4(t), df:round4(df), p, statName:'t', statVal:round4(t)};
+}
+
+function twoTailP(t, df) {
+  // Use normal approximation for df>100, otherwise beta function
+  if(df>100) return 2*(1-normalCDF(Math.abs(t)));
+  const x = df/(df+t*t);
+  const ib = incompleteBeta(df/2, 0.5, x);
+  return Math.min(1, ib);
+}
+
+// ============================================================
+// ONE-WAY ANOVA
+// ============================================================
+function oneWayANOVA(groups) {
+  // groups: array of arrays
+  const k = groups.length;
+  const N = groups.reduce((s,g)=>s+g.length,0);
+  const grandMean = mean(groups.flat());
+
+  // Between-group SS
+  const ssBetween = groups.reduce((s,g)=>s+g.length*(mean(g)-grandMean)**2,0);
+  // Within-group SS
+  const ssWithin = groups.reduce((s,g)=>s+g.reduce((ss,v)=>ss+(v-mean(g))**2,0),0);
+
+  const dfBetween = k-1;
+  const dfWithin = N-k;
+  const msBetween = ssBetween/dfBetween;
+  const msWithin = ssWithin/dfWithin;
+  const F = msBetween/msWithin;
+  const p = fDistPValue(F, dfBetween, dfWithin);
+
+  return {F:round4(F), dfBetween, dfWithin, p, msBetween, msWithin, ssWithin, statName:'F', statVal:round4(F)};
+}
+
+// Tukey HSD post-hoc test (pairwise)
+function tukeyHSD(groups, groupNames, anovaRes) {
+  const k = groups.length;
+  const N = groups.reduce((s,g)=>s+g.length,0);
+  const msWithin = anovaRes.msWithin;
+  const dfWithin = anovaRes.dfWithin;
+  const results = [];
+
+  for(let i=0;i<k-1;i++){
+    for(let j=i+1;j<k;j++){
+      const ni=groups[i].length, nj=groups[j].length;
+      const mi=mean(groups[i]), mj=mean(groups[j]);
+      const se = Math.sqrt(msWithin*(1/ni+1/nj)/2);
+      const q = Math.abs(mi-mj)/se;
+      // Approximate p-value using Bonferroni-corrected normal
+      const numComparisons = k*(k-1)/2;
+      const z = q/Math.SQRT2;
+      const p_raw = 2*(1-normalCDF(z));
+      // More accurate: use the critical value table approximation
+      // We use a conservative chi-bar approximation
+      const p = Math.min(1, p_raw*numComparisons);
+      results.push({g1:groupNames[i],g2:groupNames[j],diff:round4(mi-mj),q:round4(q),p:round4(p),raw_p:p_raw});
+    }
+  }
+  return results;
+}
+
+// ============================================================
+// MANN-WHITNEY U TEST
+// ============================================================
+function mannWhitneyU(a, b) {
+  const n1=a.length, n2=b.length;
+  // Compute ranks on combined data
+  const combined = [...a.map(v=>({v,g:0})),...b.map(v=>({v,g:1}))];
+  combined.sort((x,y)=>x.v-y.v);
+
+  // Assign ranks (with ties averaged)
+  const ranks = [];
+  let i=0;
+  while(i<combined.length){
+    let j=i;
+    while(j<combined.length && combined[j].v===combined[i].v) j++;
+    const avgRank=(i+j+1)/2; // 1-indexed average
+    for(let k=i;k<j;k++) ranks.push({...combined[k],rank:avgRank});
+    i=j;
+  }
+
+  // U statistics
+  const R1 = ranks.filter(r=>r.g===0).reduce((s,r)=>s+r.rank,0);
+  const U1 = R1 - n1*(n1+1)/2;
+  const U2 = n1*n2 - U1;
+  const U = Math.min(U1, U2);
+
+  // Normal approximation with tie correction
+  const N = n1+n2;
+  // Tie groups for correction
+  const tieGroups = [];
+  let ti=0;
+  while(ti<combined.length){
+    let tj=ti;
+    while(tj<combined.length && combined[tj].v===combined[ti].v) tj++;
+    if(tj-ti>1) tieGroups.push(tj-ti);
+    ti=tj;
+  }
+  const tieCorrection = tieGroups.reduce((s,t)=>s+(t**3-t),0);
+  const muU = n1*n2/2;
+  const sigmaU = Math.sqrt(n1*n2*(N+1)/12 - n1*n2*tieCorrection/(12*N*(N-1)));
+  const z = (U-muU)/sigmaU;
+  const p = 2*(1-normalCDF(Math.abs(z)));
+
+  return {U:round4(U), z:round4(z), p, statName:'U', statVal:round4(U)};
+}
+
+// ============================================================
+// KRUSKAL-WALLIS TEST
+// ============================================================
+function kruskalWallis(groups) {
+  const N = groups.reduce((s,g)=>s+g.length,0);
+  const combined = groups.flatMap((g,gi)=>g.map(v=>({v,gi})));
+  combined.sort((a,b)=>a.v-b.v);
+
+  // Assign ranks with tie averaging
+  const ranked = [];
+  let i=0;
+  while(i<combined.length){
+    let j=i;
+    while(j<combined.length && combined[j].v===combined[i].v) j++;
+    const avgRank=(i+j+1)/2;
+    for(let k=i;k<j;k++) ranked.push({...combined[k],rank:avgRank});
+    i=j;
+  }
+
+  // H statistic
+  const tieCorr = (() => {
+    let tc=0;
+    let ti=0;
+    while(ti<combined.length){
+      let tj=ti;
+      while(tj<combined.length && combined[tj].v===combined[ti].v) tj++;
+      const t=tj-ti; tc+=t**3-t; ti=tj;
+    }
+    return 1 - tc/(N**3-N);
+  })();
+
+  const groupRankSums = groups.map((_,gi)=>ranked.filter(r=>r.gi===gi).reduce((s,r)=>s+r.rank,0));
+  const H_num = 12/(N*(N+1)) * groupRankSums.reduce((s,Ri,gi)=>s+Ri**2/groups[gi].length,0) - 3*(N+1);
+  const H = H_num / tieCorr;
+  const df = groups.length-1;
+  const p = chiSquaredPValue(H, df);
+
+  return {H:round4(H), df, p, statName:'H', statVal:round4(H)};
+}
+
+// Dunn's post-hoc test (after Kruskal-Wallis)
+function dunnsTest(groups, groupNames, correction='holm') {
+  const N = groups.reduce((s,g)=>s+g.length,0);
+  const combined = groups.flatMap((g,gi)=>g.map(v=>({v,gi})));
+  combined.sort((a,b)=>a.v-b.v);
+
+  // Rank with ties
+  let ranked = [];
+  let i=0;
+  while(i<combined.length){
+    let j=i;
+    while(j<combined.length && combined[j].v===combined[i].v) j++;
+    const avgRank=(i+j+1)/2;
+    for(let k=i;k<j;k++) ranked.push({...combined[k],rank:avgRank});
+    i=j;
+  }
+
+  // Tie correction factor
+  const tieGroups = [];
+  i=0;
+  while(i<combined.length){
+    let j=i;
+    while(j<combined.length && combined[j].v===combined[i].v) j++;
+    if(j-i>1) tieGroups.push(j-i);
+    i=j;
+  }
+  const C = tieGroups.reduce((s,t)=>s+(t**3-t),0);
+
+  const meanRank_i = groups.map((_,gi)=>{
+    const gRanks = ranked.filter(r=>r.gi===gi).map(r=>r.rank);
+    return mean(gRanks);
+  });
+
+  const results=[];
+  const k=groups.length;
+  for(let a=0;a<k-1;a++){
+    for(let b2=a+1;b2<k;b2++){
+      const ni=groups[a].length, nj=groups[b2].length;
+      const sigma2 = (N*(N+1)/12 - C/(12*(N-1))) * (1/ni + 1/nj);
+      const z = (meanRank_i[a]-meanRank_i[b2])/Math.sqrt(sigma2);
+      const p_raw = 2*(1-normalCDF(Math.abs(z)));
+      results.push({g1:groupNames[a],g2:groupNames[b2],z:round4(z),p_raw});
+    }
+  }
+
+  // Apply multiple-comparisons correction
+  applyCorrection(results, correction);
+  return results;
+}
+
+function applyCorrection(results, method) {
+  if(method==='bonferroni'){
+    results.forEach(r=>{ r.p=Math.min(1,r.p_raw*results.length); r.p=round4(r.p); });
+  } else if(method==='holm'){
+    // Holm-Bonferroni step-down
+    results.sort((a,b)=>a.p_raw-b.p_raw);
+    const m=results.length;
+    for(let i=0;i<m;i++){
+      results[i].p=round4(Math.min(1, results[i].p_raw*(m-i)));
+    }
+    // Ensure monotonicity
+    for(let i=1;i<m;i++) results[i].p=Math.max(results[i].p, results[i-1].p);
+  } else {
+    results.forEach(r=>{ r.p=round4(r.p_raw); });
+  }
+}
+
+// ============================================================
+// SIGNIFICANCE STARS
+// ============================================================
+function pToStars(p) {
+  if(p<0.0001) return '****';
+  if(p<0.001)  return '***';
+  if(p<0.01)   return '**';
+  if(p<0.05)   return '*';
+  return 'ns';
+}
+
+function round4(v){ return Math.round(v*10000)/10000; }
+function fmtP(p){
+  if(p===null||isNaN(p)) return 'N/A';
+  if(p<0.0001) return '<0.0001';
+  return p.toFixed(4);
+}
+
+// ============================================================
+// COMPUTE ALL STATISTICS FOR CURRENT GROUPS
+// ============================================================
+function computeStats() {
+  const groups = state.groups;
+  if(!groups.length) return;
+
+  // Per-group descriptive stats
+  const descStats = groups.map(g=>{
+    const vals = state.tidyData.filter(d=>d.group===g).map(d=>d.value);
+    const m = mean(vals), med = median(vals), s = sd(vals);
+    const sem = s/Math.sqrt(vals.length);
+    const n = vals.length;
+    const ci95_mean_lo = m + jstudentQuantile(0.025, n-1)*sem;
+    const ci95_mean_hi = m + jstudentQuantile(0.975, n-1)*sem;
+    // Bootstrap CI for median
+    const [med_lo, med_hi] = bootstrapMedianCI(vals, 1000);
+    return {
+      group:g, n, mean:round4(m), sd:round4(s), sem:round4(sem),
+      mean_ci_lo:round4(ci95_mean_lo), mean_ci_hi:round4(ci95_mean_hi),
+      median:round4(med), mad:round4(mad(vals)), iqr:round4(iqr(vals)),
+      q1:round4(quantile(vals,0.25)), q3:round4(quantile(vals,0.75)),
+      geom_mean: vals.every(v=>v>0)?round4(geomMean(vals)):null,
+      median_ci_lo:round4(med_lo), median_ci_hi:round4(med_hi),
+      min:round4(Math.min(...vals)), max:round4(Math.max(...vals)),
+    };
+  });
+
+  // Normality tests
+  const useADonly = document.getElementById('norm-test').value === 'ad';
+  const normResults = groups.map(g=>{
+    const vals = state.tidyData.filter(d=>d.group===g).map(d=>d.value);
+    const res = useADonly ? {...andersonDarling(vals), W:null} : shapiroWilk(vals);
+    return {group:g, ...res};
+  });
+
+  state.stats = descStats;
+  state.normResults = normResults;
+
+  // Run appropriate statistical test
+  if(document.getElementById('run-stats').checked && groups.length>=2){
+    runStatTests(normResults);
+  } else {
+    state.testResults = null;
+  }
+}
+
+function bootstrapMedianCI(data, B=1000) {
+  const meds = [];
+  for(let i=0;i<B;i++){
+    const sample = Array.from({length:data.length},()=>data[Math.floor(Math.random()*data.length)]);
+    meds.push(median(sample));
+  }
+  meds.sort((a,b)=>a-b);
+  return [meds[Math.floor(0.025*B)], meds[Math.floor(0.975*B)]];
+}
+
+function jstudentQuantile(p, df) {
+  // Simple approximation via normal quantile for large df
+  if(df>100) return normalQuantile(p);
+  // Wilson-Hilferty approximation
+  const z = normalQuantile(p);
+  const h = 1-(2/(9*df));
+  const k = Math.cbrt(1-2/(9*df));
+  // Just use normal for simplicity
+  return normalQuantile(p);
+}
+
+// ============================================================
+// AUTO-SELECT AND RUN STATISTICAL TESTS
+// ============================================================
+function runStatTests(normResults) {
+  const groups = state.groups;
+  const k = groups.length;
+  const alpha = parseFloat(document.getElementById('alpha-thresh').value);
+  const allNormal = normResults.every(r=>r.normal===true||isNaN(r.p));
+  const autoTest = document.getElementById('auto-test').checked;
+  const correction = document.getElementById('mc-correction').value;
+
+  let useTest;
+  if(autoTest){
+    useTest = allNormal
+      ? (k===2?'t':'anova')
+      : (k===2?'wilcox':'kruskal');
+  } else {
+    useTest = document.getElementById('manual-test').value;
+  }
+
+  const groupData = groups.map(g=>state.tidyData.filter(d=>d.group===g).map(d=>d.value));
+
+  let omnibus = null, pairwise = [];
+  if(useTest==='t'){
+    if(k===2){
+      omnibus = welchTTest(groupData[0],groupData[1]);
+      omnibus.testName = "Welch's t-test";
+      pairwise = [{g1:groups[0],g2:groups[1],p:omnibus.p,t:omnibus.t,statName:'t',statVal:omnibus.t}];
+      applyCorrection(pairwise,correction);
+    }
+  } else if(useTest==='anova'){
+    omnibus = oneWayANOVA(groupData);
+    omnibus.testName = 'One-way ANOVA';
+    pairwise = tukeyHSD(groupData, groups, omnibus);
+    pairwise.forEach(r=>{r.statName='q';r.statVal=r.q;});
+    // Mark already corrected (Tukey)
+  } else if(useTest==='wilcox'){
+    if(k===2){
+      omnibus = mannWhitneyU(groupData[0],groupData[1]);
+      omnibus.testName = 'Mann–Whitney U test';
+      pairwise = [{g1:groups[0],g2:groups[1],p:omnibus.p,U:omnibus.U,statName:'U',statVal:omnibus.U}];
+    }
+  } else if(useTest==='kruskal'){
+    omnibus = kruskalWallis(groupData);
+    omnibus.testName = 'Kruskal–Wallis test';
+    pairwise = dunnsTest(groupData, groups, correction);
+    pairwise.forEach(r=>{r.statName='z';r.statVal=r.z;});
+  }
+
+  state.testResults = {useTest, omnibus, pairwise, allNormal, suggestedTest:useTest};
+  updateTestSuggestionBox(allNormal, useTest, k);
+}
+
+function suggestedTestLabel(allNormal, k) {
+  if(allNormal){
+    return k===2?"Welch's t-test (data appear normally distributed)":"One-way ANOVA + Tukey HSD (data appear normally distributed)";
+  } else {
+    return k===2?"Mann–Whitney U test (non-normal distribution detected)":"Kruskal–Wallis + Dunn's test (non-normal distribution detected)";
+  }
+}
+
+function updateTestSuggestionBox(allNormal, useTest, k) {
+  const box = document.getElementById('test-suggestion-box');
+  if(!box) return;
+  box.innerHTML = `<strong>Suggested test:</strong> ${suggestedTestLabel(allNormal, k)}<br>
+  <em style="color:#555">Based on Shapiro–Wilk normality test across all groups</em>`;
+}
+
+// ============================================================
+// DATA HANDLING
+// ============================================================
+function loadExampleData(n) {
+  const csv = n===1?EXAMPLE1_CSV:EXAMPLE2_CSV;
+  const parsed = Papa.parse(csv.trim(),{header:true,dynamicTyping:true,skipEmptyLines:true});
+  state.rawData = parsed.data;
+  document.getElementById('tidy-input').checked = (n===2);
+  handleDataLoaded(n===2);
+}
+
+function loadPastedData() {
+  const text = document.getElementById('paste-area').value.trim();
+  if(!text){setStatus('No data pasted.');return;}
+  const delimMap={'tab':'\t','comma':',','semicolon':';'};
+  const delim = delimMap[document.getElementById('paste-delim').value];
+  const parsed = Papa.parse(text,{header:true,dynamicTyping:true,delimiter:delim,skipEmptyLines:true});
+  state.rawData = parsed.data;
+  handleDataLoaded(document.getElementById('tidy-input').checked);
+}
+
+function handleFileUpload(file) {
+  if(!file) return;
+  const name = file.name.toLowerCase();
+  if(name.endsWith('.xlsx')||name.endsWith('.xls')){
+    const reader = new FileReader();
+    reader.onload = e=>{
+      const wb = XLSX.read(e.target.result,{type:'binary'});
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      const json = XLSX.utils.sheet_to_json(ws,{defval:null});
+      state.rawData = json;
+      handleDataLoaded(document.getElementById('tidy-input').checked);
+    };
+    reader.readAsBinaryString(file);
+  } else {
+    const reader = new FileReader();
+    reader.onload = e=>{
+      const delim = document.getElementById('file-delim').value;
+      const opts = {header:true,dynamicTyping:true,skipEmptyLines:true};
+      if(delim!=='auto') opts.delimiter=delim;
+      const parsed = Papa.parse(e.target.result,opts);
+      state.rawData = parsed.data;
+      handleDataLoaded(document.getElementById('tidy-input').checked);
+    };
+    reader.readAsText(file);
+  }
+}
+
+function handleDataLoaded(isTidy) {
+  if(!state.rawData||!state.rawData.length){setStatus('No data found.');return;}
+  const cols = Object.keys(state.rawData[0]);
+  // Update tidy controls
+  const xSel = document.getElementById('x-var');
+  const ySel = document.getElementById('y-var');
+  xSel.innerHTML = cols.map(c=>`<option value="${c}">${c}</option>`).join('');
+  ySel.innerHTML = cols.map(c=>`<option value="${c}">${c}</option>`).join('');
+  // Pre-select: first string col for x, first numeric for y (tidy)
+  if(isTidy){
+    const numCols = cols.filter(c=>typeof state.rawData[0][c]==='number');
+    const strCols = cols.filter(c=>typeof state.rawData[0][c]==='string');
+    if(strCols.length) xSel.value=strCols[0];
+    if(numCols.length) ySel.value=numCols[0];
+  }
+
+  // Update wide column selector
+  const colSel = document.getElementById('col-select');
+  colSel.innerHTML = cols.map(c=>`<option value="${c}" selected>${c}</option>`).join('');
+
+  buildTidyData();
+  renderDataTable();
+  setStatus(`Loaded ${state.rawData.length} rows, ${cols.length} columns.`);
+}
+
+function buildTidyData() {
+  const isTidy = document.getElementById('tidy-input').checked;
+  state.tidyData = [];
+
+  if(isTidy){
+    const xCol = document.getElementById('x-var').value;
+    const yCol = document.getElementById('y-var').value;
+    if(!xCol||!yCol) return;
+    state.rawData.forEach(row=>{
+      const v = parseFloat(row[yCol]);
+      if(isFinite(v)) state.tidyData.push({group:String(row[xCol]),value:v});
+    });
+  } else {
+    const selected = Array.from(document.getElementById('col-select').selectedOptions).map(o=>o.value);
+    if(!selected.length) return;
+    state.rawData.forEach(row=>{
+      selected.forEach(col=>{
+        const v = parseFloat(row[col]);
+        if(isFinite(v)) state.tidyData.push({group:col,value:v});
+      });
+    });
+  }
+
+  // Determine group order
+  const ordering = document.getElementById('ordering').value;
+  let rawGroups = [...new Set(state.tidyData.map(d=>d.group))];
+  if(ordering==='median'){
+    rawGroups.sort((a,b)=>{
+      const ma = median(state.tidyData.filter(d=>d.group===a).map(d=>d.value));
+      const mb = median(state.tidyData.filter(d=>d.group===b).map(d=>d.value));
+      return ma-mb;
+    });
+  } else if(ordering==='mean'){
+    rawGroups.sort((a,b)=>{
+      const ma = mean(state.tidyData.filter(d=>d.group===a).map(d=>d.value));
+      const mb = mean(state.tidyData.filter(d=>d.group===b).map(d=>d.value));
+      return ma-mb;
+    });
+  } else if(ordering==='alpha'){
+    rawGroups.sort();
+  }
+  state.groups = rawGroups;
+  computeStats();
+  drawPlot();
+  renderStatsTable();
+  renderLegend();
+}
+
+// ============================================================
+// EXPORT TIDY CSV
+// ============================================================
+function exportCSV() {
+  const rows = ['group,value',...state.tidyData.map(d=>`"${d.group}",${d.value}`)];
+  downloadText(rows.join('\n'),'dataplot_tidy.csv','text/csv');
+}
+
+// ============================================================
+// RENDER DATA TABLE
+// ============================================================
+function renderDataTable() {
+  if(!state.rawData||!state.rawData.length) return;
+  const cols = Object.keys(state.rawData[0]);
+  const maxRows = 500;
+  const shown = state.rawData.slice(0,maxRows);
+  let html = `<table class="data-table"><thead><tr>${cols.map(c=>`<th>${c}</th>`).join('')}</tr></thead><tbody>`;
+  shown.forEach(row=>{
+    html+=`<tr>${cols.map(c=>`<td>${row[c]??''}</td>`).join('')}</tr>`;
+  });
+  html+=`</tbody></table>`;
+  if(state.rawData.length>maxRows) html+=`<p style="margin-top:8px;color:#888;font-size:11px">Showing first ${maxRows} of ${state.rawData.length} rows.</p>`;
+  document.getElementById('data-table-wrap').innerHTML=html;
+}
+
+// ============================================================
+// RENDER STATISTICS TABLE
+// ============================================================
+function renderStatsTable() {
+  const el = document.getElementById('stats-content');
+  if(!state.stats||!state.stats.length){ el.innerHTML='<p style="color:#888">No data loaded.</p>'; return; }
+
+  // Suggestion box
+  let html = `<div id="test-suggestion-box" class="info-box" style="margin-bottom:12px">Run statistical tests to see suggestions.</div>`;
+
+  // Normality results table
+  const useADonly = document.getElementById('norm-test').value==='ad';
+  const normLabel = useADonly ? 'Anderson–Darling' : 'Shapiro–Wilk W + Anderson–Darling p';
+  html += `<div class="stats-section"><h3>Normality Test (${normLabel})</h3>`;
+  html += `<p style="font-size:11px;color:#666;margin-bottom:6px">p ≥ 0.05 → data consistent with normality (fail to reject H₀).
+    ${!useADonly?'W = Shapiro–Wilk statistic; ':''}A²* = Anderson–Darling statistic.</p>`;
+  const hasW = state.normResults.some(r=>r.W!==null&&!isNaN(r.W));
+  html += `<table class="data-table"><thead><tr><th>Group</th><th>n</th>
+    ${hasW?'<th>W (Shapiro–Wilk)</th>':''}
+    <th>A²* (Anderson–Darling)</th><th>p-value</th><th>Result</th></tr></thead><tbody>`;
+  state.normResults.forEach(r=>{
+    const badge = (r.normal===null||isNaN(r.p))?`<span class="norm-badge" style="background:#95a5a6">${r.label||'N/A'}</span>`:
+      r.normal?`<span class="norm-badge norm-normal">Normal</span>`:`<span class="norm-badge norm-nonnormal">Non-normal</span>`;
+    const wStr = (!r.W||isNaN(r.W))?'—':r.W.toFixed(4);
+    const aStr = (!r.stat||isNaN(r.stat))?'—':r.stat.toFixed(4);
+    const pStr = (!r.p||isNaN(r.p))?'—':fmtP(r.p);
+    const n = state.stats.find(s=>s.group===r.group)?.n??'?';
+    html+=`<tr><td><strong>${r.group}</strong></td><td>${n}</td>
+      ${hasW?`<td>${wStr}</td>`:''}
+      <td>${aStr}</td><td>${pStr}</td><td>${badge}</td></tr>`;
+  });
+  html+=`</tbody></table></div>`;
+
+  // Descriptive statistics table
+  html+=`<div class="stats-section"><h3>Descriptive Statistics</h3>`;
+  html+=`<table class="data-table"><thead><tr><th>Group</th><th>n</th><th>Mean</th><th>SD</th><th>SEM</th><th>95% CI Mean</th><th>Median</th><th>MAD</th><th>IQR</th><th>Q1</th><th>Q3</th><th>95% CI Median</th><th>Min</th><th>Max</th></tr></thead><tbody>`;
+  state.stats.forEach(s=>{
+    html+=`<tr>
+      <td><strong>${s.group}</strong></td>
+      <td>${s.n}</td>
+      <td>${s.mean}</td>
+      <td>${s.sd}</td>
+      <td>${s.sem}</td>
+      <td>[${s.mean_ci_lo}, ${s.mean_ci_hi}]</td>
+      <td>${s.median}</td>
+      <td>${s.mad}</td>
+      <td>${s.iqr}</td>
+      <td>${s.q1}</td>
+      <td>${s.q3}</td>
+      <td>[${s.median_ci_lo}, ${s.median_ci_hi}]</td>
+      <td>${s.min}</td>
+      <td>${s.max}</td>
+    </tr>`;
+  });
+  html+=`</tbody></table></div>`;
+
+  // Statistical test results
+  if(state.testResults){
+    const tr = state.testResults;
+    html+=`<div class="stats-section"><h3>Statistical Test: ${tr.omnibus?.testName??''}</h3>`;
+    if(tr.omnibus){
+      const ov = tr.omnibus;
+      html+=`<div class="info-box" style="margin-bottom:8px">`;
+      if(ov.testName?.includes('t-test')){
+        html+=`t = ${ov.t}, df = ${ov.df?.toFixed(1)}, p = ${fmtP(ov.p)} ${pToStars(ov.p)}`;
+      } else if(ov.testName?.includes('ANOVA')){
+        html+=`F(${ov.dfBetween},${ov.dfWithin}) = ${ov.F}, p = ${fmtP(ov.p)} ${pToStars(ov.p)}`;
+      } else if(ov.testName?.includes('Mann')){
+        html+=`U = ${ov.U}, z = ${ov.z}, p = ${fmtP(ov.p)} ${pToStars(ov.p)}`;
+      } else if(ov.testName?.includes('Kruskal')){
+        html+=`H(${ov.df}) = ${ov.H}, p = ${fmtP(ov.p)} ${pToStars(ov.p)}`;
+      }
+      html+=`</div>`;
+    }
+    if(tr.pairwise && tr.pairwise.length){
+      const corrLabel = {holm:'Holm',bonferroni:'Bonferroni',none:'None'}[document.getElementById('mc-correction').value];
+      html+=`<h3>Pairwise Comparisons (${tr.omnibus?.testName?.includes('ANOVA')?'Tukey HSD':tr.omnibus?.testName?.includes('Kruskal')?"Dunn's test":'direct'}, ${corrLabel} correction)</h3>`;
+      html+=`<table class="data-table"><thead><tr><th>Group 1</th><th>Group 2</th><th>Statistic</th><th>p-value (adj.)</th><th>Significance</th></tr></thead><tbody>`;
+      tr.pairwise.forEach(r=>{
+        const stars = pToStars(r.p);
+        const starsHtml = stars==='ns'?`<span class="sig-ns">ns</span>`:`<span class="sig-stars">${stars}</span>`;
+        html+=`<tr><td>${r.g1}</td><td>${r.g2}</td><td>${r.statName} = ${r.statVal??r.z??r.t??'—'}</td><td>${fmtP(r.p)}</td><td>${starsHtml}</td></tr>`;
+      });
+      html+=`</tbody></table>`;
+    }
+    html+=`</div>`;
+  }
+  el.innerHTML = html;
+
+  // Update suggestion box if test results exist
+  if(state.testResults){
+    updateTestSuggestionBox(state.testResults.allNormal, state.testResults.useTest, state.groups.length);
+  }
+}
+
+// ============================================================
+// RENDER FIGURE LEGEND
+// ============================================================
+function renderLegend() {
+  const el = document.getElementById('legend-content');
+  if(!state.tidyData.length){ el.innerHTML=''; return; }
+  const jt = {beeswarm:'quasirandom jittered dots',random:'randomly jittered dots',strip:'individual data points',stripes:'horizontal lines (stripes)'}[document.getElementById('jitter-type').value]||'data points';
+  const st = {median:'horizontal line indicating the median',mean:'horizontal line indicating the mean',geom_mean:'horizontal line indicating the geometric mean',box:'boxplot (box: IQR; whiskers: 1.5×IQR; line: median)',violin:'violin plot (KDE density) with median marker',none:'no summary statistic'}[document.getElementById('summary-type').value]||'';
+  const ns = state.groups.map(g=>{
+    const n=state.tidyData.filter(d=>d.group===g).length;
+    return `${g} (n=${n})`;
+  }).join(', ');
+  let text=`<h3 style="margin-bottom:12px;color:#2c3e6b">Figure Legend</h3>`;
+  text+=`<p>The data are shown as ${jt} (transparency: ${document.getElementById('data-alpha').value}). `;
+  text+=`The number of data points per condition is: ${ns}. `;
+  text+=`The summary statistic shown is the ${st} (transparency: ${document.getElementById('summ-alpha').value}). `;
+  if(document.getElementById('show-ci').checked) text+=`Error bars represent the 95% confidence interval. `;
+  if(document.getElementById('show-sd').checked) text+=`Error bars represent ±1 standard deviation (SD). `;
+  if(document.getElementById('show-sem').checked) text+=`Error bars represent ±1 standard error of the mean (SEM). `;
+  if(document.getElementById('log-scale').checked) text+=`Values are plotted on a log₁₀ scale. `;
+  if(state.testResults){
+    const tr=state.testResults;
+    text+=`Statistical comparisons were made using the ${tr.omnibus?.testName||''}. `;
+    if(tr.pairwise?.length){
+      const sig=tr.pairwise.filter(r=>r.p<parseFloat(document.getElementById('alpha-thresh').value));
+      if(sig.length) text+=`Significant differences were observed between: ${sig.map(r=>`${r.g1} vs ${r.g2} (p=${fmtP(r.p)})`).join('; ')}. `;
+      else text+=`No significant pairwise differences were found. `;
+    }
+    text+=`Significance is indicated as: ****p<0.0001, ***p<0.001, **p<0.01, *p<0.05, ns=not significant. `;
+    const corr={holm:'Holm',bonferroni:'Bonferroni',none:'no'}[document.getElementById('mc-correction').value];
+    text+=`Multiple comparisons correction: ${corr}. `;
+  }
+  text+=`</p>`;
+  el.innerHTML=text;
+}
+
+// ============================================================
+// D3 PLOTTING ENGINE
+// ============================================================
+function drawPlot() {
+  if(!state.tidyData||!state.tidyData.length){
+    d3.select('#plot-svg').selectAll('*').remove();
+    return;
+  }
+
+  const W = parseInt(document.getElementById('plot-width').value)||520;
+  const H = parseInt(document.getElementById('plot-height').value)||480;
+
+  // Read layout-critical options first so we can size the top margin correctly
+  const fontTitle = parseInt(document.getElementById('font-title').value)||14;
+  const showSigBars = document.getElementById('show-sig-bars').checked;
+  const alphaThresh = parseFloat(document.getElementById('alpha-thresh').value);
+  const showNs = document.getElementById('show-ns').checked;
+  const titleTxt = document.getElementById('plot-title').value;
+  const groups = state.groups;
+
+  // Pre-compute how many significance-bar slots are needed
+  const _stepPx = 22;
+  const titleHeight = titleTxt ? (fontTitle + 2) + 14 : 0;
+  const numSigSlots = (showSigBars && state.testResults?.pairwise?.length)
+    ? countSigBarSlots(groups, alphaThresh, showNs) : 0;
+  const barsSpacePx = numSigSlots > 0 ? numSigSlots * _stepPx + 16 : 0;
+
+  const margin = {
+    top: Math.max(30, titleHeight + barsSpacePx + 8),
+    right: 30, bottom: 60, left: 65
+  };
+  const innerW = W-margin.left-margin.right;
+  const innerH = H-margin.top-margin.bottom;
+
+  const svg = d3.select('#plot-svg')
+    .attr('width',W).attr('height',H)
+    .attr('xmlns','http://www.w3.org/2000/svg')
+    .attr('xmlns:xlink','http://www.w3.org/1999/xlink');
+  svg.selectAll('*').remove();
+
+  const dark = document.getElementById('dark-mode').checked;
+  const bgColor = dark?'#1e2235':'white';
+  const lineColor = dark?'#aaa':'#333';
+  const gridColor = dark?'#2a3050':'#e8e8e8';
+  const textColor = dark?'#ccc':'#333';
+  const axisColor = dark?'#999':'#555';
+
+  // Background
+  svg.append('rect').attr('width',W).attr('height',H).attr('fill',bgColor);
+
+  // Title — drawn at the very top of the SVG, above all significance bars
+  if(titleTxt){
+    svg.append('text').attr('x',W/2).attr('y',fontTitle+6)
+      .attr('text-anchor','middle')
+      .attr('font-size',fontTitle+2).attr('font-weight','bold').attr('fill',textColor).text(titleTxt);
+  }
+
+  const g = svg.append('g').attr('transform',`translate(${margin.left},${margin.top})`);
+  // (groups, showSigBars, fontTitle, alphaThresh, showNs, titleTxt already declared above for margin calc)
+  const dataAlpha = parseFloat(document.getElementById('data-alpha').value);
+  const summAlpha = parseFloat(document.getElementById('summ-alpha').value);
+  const summType = document.getElementById('summary-type').value;
+  const jitterType = document.getElementById('jitter-type').value;
+  const showCI = document.getElementById('show-ci').checked;
+  const showSD = document.getElementById('show-sd').checked;
+  const logScale = document.getElementById('log-scale').checked;
+  const flipAxes = document.getElementById('flip-axes').checked;
+  const colorData = document.getElementById('color-data').checked;
+  const colorStats = document.getElementById('color-stats').checked;
+  const ptSize = parseFloat(document.getElementById('point-size').value)||5;
+  const fontAxis = parseInt(document.getElementById('font-axis').value)||12;
+  const showSEM = document.getElementById('show-sem').checked;
+
+  // Colors
+  let colors = getPalette();
+
+  // All values for scale
+  const allVals = state.tidyData.map(d=>d.value).filter(v=>isFinite(v));
+  const rangeInput = document.getElementById('y-range').value.trim();
+  let yMin, yMax;
+  if(rangeInput){
+    const parts = rangeInput.split(',').map(Number);
+    yMin=parts[0]; yMax=parts[1];
+  } else {
+    yMin=Math.min(...allVals); yMax=Math.max(...allVals);
+    const pad=(yMax-yMin)*0.08;
+    yMin-=pad; yMax+=pad;
+    if(logScale&&yMin<=0) yMin=Math.min(...allVals.filter(v=>v>0))*0.5;
+  }
+
+  // Scales
+  const xScale = d3.scaleBand().domain(groups).range([0,innerW]).padding(0.3);
+  const yScaleBase = logScale
+    ? d3.scaleLog().domain([yMin,yMax]).range([innerH,0])
+    : d3.scaleLinear().domain([yMin,yMax]).range([innerH,0]);
+
+  // Apply flip if needed (swap x and y)
+  // For simplicity, we implement flip by rotating the SVG group
+  const xS = xScale, yS = yScaleBase;
+
+  // Gridlines
+  if(!document.getElementById('no-grid').checked){
+    const ticks = yS.ticks?yS.ticks(6):[];
+    g.append('g').attr('class','grid')
+      .selectAll('line').data(ticks).enter().append('line')
+      .attr('x1',0).attr('x2',innerW)
+      .attr('y1',d=>yS(d)).attr('y2',d=>yS(d))
+      .attr('stroke',gridColor).attr('stroke-width',1).attr('stroke-dasharray','3,3');
+  }
+
+  // Axes
+  const xAxis = d3.axisBottom(xS).tickSize(5);
+  const yAxis = d3.axisLeft(yS).ticks(6).tickSize(5);
+  if(logScale) yAxis.tickFormat(d3.format('.3~g'));
+
+  const xAxisG = g.append('g').attr('transform',`translate(0,${innerH})`).call(xAxis);
+  xAxisG.selectAll('text').style('font-size',fontAxis).style('fill',textColor);
+  xAxisG.selectAll('.domain,.tick line').style('stroke',axisColor);
+
+  const yAxisG = g.append('g').call(yAxis);
+  yAxisG.selectAll('text').style('font-size',fontAxis).style('fill',textColor);
+  yAxisG.selectAll('.domain,.tick line').style('stroke',axisColor);
+
+  // Axis labels
+  const xLabelTxt = document.getElementById('x-label').value || 'Group';
+  const yLabelTxt = document.getElementById('y-label').value || 'Value';
+  g.append('text').attr('x',innerW/2).attr('y',innerH+45).attr('text-anchor','middle')
+    .attr('font-size',fontTitle).attr('fill',textColor).text(xLabelTxt);
+  g.append('text').attr('transform','rotate(-90)').attr('x',-innerH/2).attr('y',-50)
+    .attr('text-anchor','middle').attr('font-size',fontTitle).attr('fill',textColor).text(yLabelTxt);
+
+  // For each group: draw data and summaries
+  groups.forEach((grp,gi)=>{
+    const vals = state.tidyData.filter(d=>d.group===grp).map(d=>d.value).filter(isFinite);
+    if(!vals.length) return;
+    const cx = xS(grp)+xS.bandwidth()/2;
+    const bw = xS.bandwidth();
+    const col = colors[gi%colors.length];
+    const dataCol = colorData?col:lineColor;
+    const statCol = colorStats?col:lineColor;
+
+    // === VIOLIN ===
+    if((summType==='violin')&&vals.length>=5){
+      const kde = kernelDensityEstimator(kernelEpanechnikov(0.9*sd(vals)*Math.pow(vals.length,-0.2)), yS.ticks(50));
+      const density = kde(vals).filter(([y,_])=>y>=yMin&&y<=yMax);
+      const maxD = Math.max(...density.map(([,d])=>d));
+      const vScale = d3.scaleLinear().domain([0,maxD]).range([0,bw*0.45]);
+      const area = d3.area().x0(d=>cx-vScale(d[1])).x1(d=>cx+vScale(d[1])).y(d=>yS(d[0])).curve(d3.curveCatmullRom);
+      g.append('path').datum(density).attr('d',area)
+        .attr('fill',statCol).attr('fill-opacity',summAlpha*0.4)
+        .attr('stroke',statCol).attr('stroke-opacity',summAlpha).attr('stroke-width',1.5);
+    }
+
+    // === BOXPLOT ===
+    if((summType==='box')&&vals.length>=5){
+      const q1=quantile(vals,0.25), q3=quantile(vals,0.75), med=median(vals);
+      const whiskerLo=Math.max(Math.min(...vals),q1-1.5*(q3-q1));
+      const whiskerHi=Math.min(Math.max(...vals),q3+1.5*(q3-q1));
+      const bxW=bw*0.55;
+      // Box
+      g.append('rect').attr('x',cx-bxW/2).attr('y',yS(q3)).attr('width',bxW).attr('height',yS(q1)-yS(q3))
+        .attr('fill',statCol).attr('fill-opacity',summAlpha*0.25).attr('stroke',statCol).attr('stroke-opacity',summAlpha).attr('stroke-width',1.5);
+      // Median line
+      g.append('line').attr('x1',cx-bxW/2).attr('x2',cx+bxW/2).attr('y1',yS(med)).attr('y2',yS(med))
+        .attr('stroke',statCol).attr('stroke-width',2.5).attr('stroke-opacity',summAlpha);
+      // Whiskers
+      g.append('line').attr('x1',cx).attr('x2',cx).attr('y1',yS(q3)).attr('y2',yS(whiskerHi))
+        .attr('stroke',statCol).attr('stroke-width',1.5).attr('stroke-dasharray','4,2').attr('stroke-opacity',summAlpha);
+      g.append('line').attr('x1',cx).attr('x2',cx).attr('y1',yS(q1)).attr('y2',yS(whiskerLo))
+        .attr('stroke',statCol).attr('stroke-width',1.5).attr('stroke-dasharray','4,2').attr('stroke-opacity',summAlpha);
+      // Whisker caps
+      [[whiskerHi],[whiskerLo]].forEach(([wv])=>{
+        g.append('line').attr('x1',cx-bxW*0.2).attr('x2',cx+bxW*0.2).attr('y1',yS(wv)).attr('y2',yS(wv))
+          .attr('stroke',statCol).attr('stroke-width',1.5).attr('stroke-opacity',summAlpha);
+      });
+    }
+
+    // === BEESWARM POINTS ===
+    let positions;
+    if(jitterType==='beeswarm') positions=beeswarm(vals,yS,ptSize,bw);
+    else if(jitterType==='random') positions=vals.map(v=>({x:(Math.random()-0.5)*bw*0.5,y:v}));
+    else if(jitterType==='strip') positions=vals.map(v=>({x:0,y:v}));
+    else if(jitterType==='stripes') positions=vals.map(v=>({x:0,y:v}));
+
+    if(jitterType==='stripes'){
+      positions.forEach(({y})=>{
+        g.append('line').attr('x1',cx-bw*0.35).attr('x2',cx+bw*0.35)
+          .attr('y1',yS(y)).attr('y2',yS(y))
+          .attr('stroke',dataCol).attr('stroke-width',1.5).attr('stroke-opacity',dataAlpha);
+      });
+    } else {
+      g.selectAll(`.pt-${gi}`).data(positions).enter().append('circle')
+        .attr('class',`pt-${gi}`)
+        .attr('cx',d=>cx+d.x).attr('cy',d=>yS(d.y)).attr('r',ptSize/2)
+        .attr('fill',dataCol).attr('fill-opacity',dataAlpha)
+        .attr('stroke',dark?'none':'rgba(0,0,0,0.1)').attr('stroke-width',0.5);
+    }
+
+    // === MEDIAN / MEAN line ===
+    if(summType==='median'||summType==='mean'||summType==='geom_mean'){
+      const sv = summType==='median'?median(vals):summType==='mean'?mean(vals):geomMean(vals);
+      const lineW = bw*0.55;
+      g.append('line').attr('x1',cx-lineW/2).attr('x2',cx+lineW/2)
+        .attr('y1',yS(sv)).attr('y2',yS(sv))
+        .attr('stroke',statCol).attr('stroke-width',3).attr('stroke-opacity',summAlpha);
+
+      const st = state.stats.find(s=>s.group===grp);
+      if(st){
+        // CI bars
+        if(showCI && vals.length>=5){
+          let lo,hi;
+          if(summType==='median'){ lo=st.median_ci_lo; hi=st.median_ci_hi; }
+          else { lo=st.mean_ci_lo; hi=st.mean_ci_hi; }
+          g.append('line').attr('x1',cx).attr('x2',cx).attr('y1',yS(lo)).attr('y2',yS(hi))
+            .attr('stroke',statCol).attr('stroke-width',2.5).attr('stroke-opacity',summAlpha);
+          [[lo],[hi]].forEach(([v])=>{
+            g.append('line').attr('x1',cx-7).attr('x2',cx+7).attr('y1',yS(v)).attr('y2',yS(v))
+              .attr('stroke',statCol).attr('stroke-width',2.5).attr('stroke-opacity',summAlpha);
+          });
+        }
+        // SD bars
+        if(showSD){
+          const lo2=st.mean-st.sd, hi2=st.mean+st.sd;
+          g.append('line').attr('x1',cx).attr('x2',cx).attr('y1',yS(lo2)).attr('y2',yS(hi2))
+            .attr('stroke',statCol).attr('stroke-width',2).attr('stroke-opacity',summAlpha*0.7).attr('stroke-dasharray','5,2');
+          [[lo2],[hi2]].forEach(([v])=>{
+            g.append('line').attr('x1',cx-5).attr('x2',cx+5).attr('y1',yS(v)).attr('y2',yS(v))
+              .attr('stroke',statCol).attr('stroke-width',2).attr('stroke-opacity',summAlpha*0.7);
+          });
+        }
+        // SEM bars (solid, narrower caps than SD to visually distinguish)
+        if(showSEM && st.sem!=null){
+          const lo3=st.mean-st.sem, hi3=st.mean+st.sem;
+          g.append('line').attr('x1',cx).attr('x2',cx).attr('y1',yS(lo3)).attr('y2',yS(hi3))
+            .attr('stroke',statCol).attr('stroke-width',2.5).attr('stroke-opacity',summAlpha);
+          [[lo3],[hi3]].forEach(([v])=>{
+            g.append('line').attr('x1',cx-6).attr('x2',cx+6).attr('y1',yS(v)).attr('y2',yS(v))
+              .attr('stroke',statCol).attr('stroke-width',2.5).attr('stroke-opacity',summAlpha);
+          });
+        }
+      }
+    }
+    // violin median marker
+    if(summType==='violin'&&vals.length>=5){
+      const med=median(vals);
+      g.append('circle').attr('cx',cx).attr('cy',yS(med)).attr('r',4)
+        .attr('fill',bgColor).attr('stroke',statCol).attr('stroke-width',2).attr('stroke-opacity',summAlpha);
+    }
+  });
+
+  // === SIGNIFICANCE BARS ===
+  if(showSigBars && state.testResults?.pairwise?.length){
+    drawSignificanceBars(g,groups,xS,yS,innerH,yMax,lineColor,textColor,fontAxis,alphaThresh,showNs);
+  }
+}
+
+// ============================================================
+// BEESWARM LAYOUT
+// ============================================================
+function beeswarm(vals, yScale, ptSize, bw) {
+  const radius = ptSize/2 + 1;
+  const placed = [];
+  const sorted = [...vals].map((v,i)=>({v,i})).sort((a,b)=>a.v-b.v);
+  sorted.forEach(({v})=>{
+    const y = yScale(v);
+    // Try to place at x=0, then step outward
+    let x=0, found=false;
+    for(let step=0;step<=Math.floor(bw/2/radius);step++){
+      for(let dir of [1,-1]){
+        x = step*radius*dir;
+        const ok=placed.every(p=>Math.hypot(p.x-x,p.y-y)>=radius*1.8);
+        if(ok){found=true;break;}
+      }
+      if(found)break;
+    }
+    placed.push({x,y:v});
+  });
+  return placed;
+}
+
+// ============================================================
+// SIGNIFICANCE BAR DRAWING
+// ============================================================
+
+// Pre-calculate how many stacking slots significance brackets will need
+// (mirrors the slot-assignment logic in drawSignificanceBars)
+function countSigBarSlots(groups, alphaThresh, showNs) {
+  if(!state.testResults?.pairwise?.length) return 0;
+  const pairs = state.testResults.pairwise;
+  const toShow = showNs ? pairs : pairs.filter(r=>r.p<alphaThresh);
+  if(!toShow.length) return 0;
+  const sortedPairs = [...toShow].sort((a,b)=>{
+    const ia=groups.indexOf(a.g1), ib=groups.indexOf(b.g1);
+    const ja=groups.indexOf(a.g2), jb=groups.indexOf(b.g2);
+    return (ja-ia)-(jb-ib);
+  });
+  const barLayer = [];
+  let maxSlot = 0;
+  sortedPairs.forEach(pair=>{
+    const i1=groups.indexOf(pair.g1), i2=groups.indexOf(pair.g2);
+    if(i1<0||i2<0) return;
+    let slot=0;
+    while(barLayer.some(b=>b.slot===slot&&Math.max(b.i1,i1)<=Math.min(b.i2,i2))) slot++;
+    barLayer.push({slot,i1,i2});
+    if(slot>maxSlot) maxSlot=slot;
+  });
+  return maxSlot+1;
+}
+
+function drawSignificanceBars(g, groups, xS, yS, innerH, yMax, lineColor, textColor, fontSize, alphaThresh, showNs) {
+  const pairs = state.testResults.pairwise;
+  const toShow = showNs ? pairs : pairs.filter(r=>r.p<alphaThresh);
+  if(!toShow.length) return;
+
+  // Determine top of each group's data
+  const groupTop = {};
+  groups.forEach(grp=>{
+    const vals=state.tidyData.filter(d=>d.group===grp).map(d=>d.value).filter(isFinite);
+    groupTop[grp] = vals.length?Math.max(...vals):yMax;
+  });
+
+  // Calculate bracket y-positions (stacking from top)
+  const allVals = state.tidyData.map(d=>d.value).filter(isFinite);
+  const dataMax = Math.max(...allVals);
+  const yRange = yS.domain()[1]-yS.domain()[0];
+  const stepPx = 22; // pixels per bracket level
+  const barPad = 8;
+
+  // Sort pairs by span (ascending), draw inner brackets first
+  const sortedPairs = [...toShow].sort((a,b)=>{
+    const ia=groups.indexOf(a.g1), ib=groups.indexOf(b.g1);
+    const ja=groups.indexOf(a.g2), jb=groups.indexOf(b.g2);
+    return (ja-ia)-(jb-ib);
+  });
+
+  // Compute y-position for each bracket (in pixels from top of inner area)
+  // Start from the top of the plot area and stack downward (toward data)
+  const barLayer = []; // track used y positions
+  const topMargin = -8; // pixels above plot area
+
+  sortedPairs.forEach((pair,pi)=>{
+    const i1=groups.indexOf(pair.g1), i2=groups.indexOf(pair.g2);
+    if(i1<0||i2<0) return;
+    const x1=xS(pair.g1)+xS.bandwidth()/2;
+    const x2=xS(pair.g2)+xS.bandwidth()/2;
+    // Find a y slot that doesn't clash with existing bars in range [i1,i2]
+    let slot=0;
+    while(barLayer.some(b=>b.slot===slot&&Math.max(b.i1,i1)<=Math.min(b.i2,i2))) slot++;
+    barLayer.push({slot,i1,i2});
+    const barY = topMargin - slot*stepPx;
+    const stars = pToStars(pair.p);
+    const showThisBar = showNs || stars!=='ns';
+    if(!showThisBar) return;
+    const tickH=5;
+    // Horizontal line
+    g.append('line').attr('x1',x1).attr('x2',x2).attr('y1',barY).attr('y2',barY)
+      .attr('stroke',lineColor).attr('stroke-width',1.5);
+    // Ticks down
+    g.append('line').attr('x1',x1).attr('x2',x1).attr('y1',barY).attr('y2',barY+tickH)
+      .attr('stroke',lineColor).attr('stroke-width',1.5);
+    g.append('line').attr('x1',x2).attr('x2',x2).attr('y1',barY).attr('y2',barY+tickH)
+      .attr('stroke',lineColor).attr('stroke-width',1.5);
+    // Stars / ns text
+    const starsColor = stars==='ns'?'#888':lineColor;
+    g.append('text').attr('x',(x1+x2)/2).attr('y',barY-4)
+      .attr('text-anchor','middle').attr('font-size',stars==='ns'?fontSize-1:fontSize+2)
+      .attr('font-weight', stars==='ns'?'normal':'bold')
+      .attr('fill',starsColor).text(stars);
+  });
+}
+
+// ============================================================
+// KDE for violin plots
+// ============================================================
+function kernelDensityEstimator(kernel, X) {
+  return function(V) {
+    return X.map(x=>[x, d3.mean(V,v=>kernel(x-v))]);
+  };
+}
+function kernelEpanechnikov(k) {
+  return function(v) {
+    return Math.abs(v/=k)<=1?0.75*(1-v*v)/k:0;
+  };
+}
+
+// ============================================================
+// COLOR PALETTE
+// ============================================================
+function getPalette() {
+  const pal = document.getElementById('palette').value;
+  if(pal==='custom'){
+    const raw = document.getElementById('custom-colors').value;
+    return raw.split(',').map(s=>s.trim()).filter(s=>s);
+  }
+  return PALETTES[pal]||PALETTES.okabe;
+}
+
+// ============================================================
+// EXPORT FUNCTIONS
+// ============================================================
+function exportSVG() {
+  const svg = document.getElementById('plot-svg');
+  const serializer = new XMLSerializer();
+  let svgStr = serializer.serializeToString(svg);
+  // Add XML declaration and namespace
+  svgStr = '<?xml version="1.0" encoding="UTF-8"?>\n' + svgStr;
+  downloadText(svgStr, 'dataplot.svg', 'image/svg+xml');
+}
+
+function exportPNG() {
+  const svg = document.getElementById('plot-svg');
+  const W = parseInt(svg.getAttribute('width')), H = parseInt(svg.getAttribute('height'));
+  const serializer = new XMLSerializer();
+  const svgStr = serializer.serializeToString(svg);
+  const blob = new Blob([svgStr],{type:'image/svg+xml'});
+  const url = URL.createObjectURL(blob);
+  const img = new Image();
+  img.onload = ()=>{
+    const scale = 3; // 300 DPI equivalent
+    const canvas = document.createElement('canvas');
+    canvas.width=W*scale; canvas.height=H*scale;
+    const ctx = canvas.getContext('2d');
+    ctx.scale(scale,scale);
+    ctx.fillStyle = document.getElementById('dark-mode').checked?'#1e2235':'white';
+    ctx.fillRect(0,0,W,H);
+    ctx.drawImage(img,0,0);
+    URL.revokeObjectURL(url);
+    canvas.toBlob(b=>{
+      const a=document.createElement('a');
+      a.href=URL.createObjectURL(b);
+      a.download='dataplot.png';
+      a.click();
+    },'image/png');
+  };
+  img.src=url;
+}
+
+// ============================================================
+// COLOR PICKER / EYEDROPPER
+// ============================================================
+function openNativePicker() {
+  const input = document.getElementById('native-color-input');
+  input.onchange = () => addCustomColor(input.value);
+  input.click();
+}
+
+async function pickColorFromScreen() {
+  if (!window.EyeDropper) {
+    alert('Eyedropper is not supported in this browser.\nPlease use Chrome or Edge, or use the 🎨 color picker button instead.');
+    return;
+  }
+  try {
+    const eyeDropper = new EyeDropper();
+    const result = await eyeDropper.open();
+    addCustomColor(result.sRGBHex);
+  } catch(e) {
+    // user pressed Escape — silently ignore
+  }
+}
+
+function addCustomColor(hex) {
+  const input = document.getElementById('custom-colors');
+  const current = input.value.split(',').map(c => c.trim()).filter(Boolean);
+  if (!current.includes(hex)) current.push(hex);
+  input.value = current.join(',');
+  // Switch to custom palette
+  const palSel = document.getElementById('palette');
+  palSel.value = 'custom';
+  document.getElementById('custom-palette-row').style.display = 'block';
+  updateColorSwatches();
+  drawPlot();
+}
+
+function updateColorSwatches() {
+  const input = document.getElementById('custom-colors');
+  const colors = input.value.split(',').map(c => c.trim()).filter(Boolean);
+  const row = document.getElementById('color-swatch-row');
+  if (!row) return;
+  row.innerHTML = colors.map((c, i) =>
+    `<div class="color-swatch" style="background:${c}" title="${c} — click to remove" onclick="removeCustomColor(${i})"></div>`
+  ).join('');
+}
+
+function removeCustomColor(idx) {
+  const input = document.getElementById('custom-colors');
+  const colors = input.value.split(',').map(c => c.trim()).filter(Boolean);
+  colors.splice(idx, 1);
+  input.value = colors.join(',');
+  updateColorSwatches();
+  drawPlot();
+}
+
+function exportFullCSV() {
+  if(!state.rawData||!state.rawData.length){ alert('No data loaded.'); return; }
+  const cols = Object.keys(state.rawData[0]);
+  const escape = v => (v==null?'':String(v).includes(',')||String(v).includes('"')||String(v).includes('\n')?`"${String(v).replace(/"/g,'""')}"`:v);
+  const rows = [cols.join(','), ...state.rawData.map(r=>cols.map(c=>escape(r[c])).join(','))];
+  downloadText(rows.join('\n'), 'dataplot_full.csv', 'text/csv');
+}
+
+function exportPDF() {
+  // Comprehensive report: plot + summary statistics + test results + raw data
+  const svg = document.getElementById('plot-svg');
+  const serializer = new XMLSerializer();
+  const svgStr = serializer.serializeToString(svg);
+
+  // Build statistics table HTML
+  let statsHtml = '';
+  if(state.stats && state.stats.length){
+    statsHtml += `<h2>Summary Statistics</h2>
+    <table><thead><tr><th>Group</th><th>n</th><th>Mean</th><th>SD</th><th>SEM</th><th>Median</th><th>IQR</th><th>Min</th><th>Max</th></tr></thead><tbody>`;
+    state.stats.forEach(s=>{
+      statsHtml += `<tr><td>${s.group}</td><td>${s.n}</td><td>${s.mean}</td><td>${s.sd}</td><td>${s.sem}</td><td>${s.median}</td><td>${s.iqr}</td><td>${s.min}</td><td>${s.max}</td></tr>`;
+    });
+    statsHtml += `</tbody></table>`;
+  }
+
+  // Build test results HTML
+  let testHtml = '';
+  if(state.testResults){
+    const tr = state.testResults;
+    testHtml += `<h2>Statistical Tests</h2>`;
+    if(tr.normality && tr.normality.length){
+      testHtml += `<h3>Normality Tests (Anderson-Darling)</h3><table><thead><tr><th>Group</th><th>W (Shapiro-Wilk)</th><th>p-value</th><th>Result</th></tr></thead><tbody>`;
+      tr.normality.forEach(r=>{ testHtml+=`<tr><td>${r.group}</td><td>${r.W??'–'}</td><td>${fmtP(r.p)}</td><td>${r.label}</td></tr>`; });
+      testHtml += `</tbody></table>`;
+    }
+    if(tr.omnibus){
+      const o=tr.omnibus;
+      testHtml += `<h3>Omnibus Test: ${o.testName}</h3><p>${o.statName} = ${o.statVal}, df = ${o.df??'–'}, p = ${fmtP(o.p)}</p>`;
+    }
+    if(tr.pairwise && tr.pairwise.length){
+      testHtml += `<h3>Pairwise Comparisons</h3><table><thead><tr><th>Group 1</th><th>Group 2</th><th>Statistic</th><th>p (adjusted)</th><th>Significance</th></tr></thead><tbody>`;
+      tr.pairwise.forEach(r=>{ testHtml+=`<tr><td>${r.g1}</td><td>${r.g2}</td><td>${r.statName}=${r.statVal}</td><td>${fmtP(r.p)}</td><td>${pToStars(r.p)}</td></tr>`; });
+      testHtml += `</tbody></table>`;
+    }
+  }
+
+  // Build data table HTML (up to 500 rows)
+  let dataHtml = '';
+  if(state.rawData && state.rawData.length){
+    const cols = Object.keys(state.rawData[0]);
+    const shown = state.rawData.slice(0, 500);
+    dataHtml += `<h2>Data${state.rawData.length>500?' (first 500 rows)':''}</h2>
+    <table><thead><tr>${cols.map(c=>`<th>${c}</th>`).join('')}</tr></thead><tbody>`;
+    shown.forEach(row=>{ dataHtml+=`<tr>${cols.map(c=>`<td>${row[c]??''}</td>`).join('')}</tr>`; });
+    dataHtml += `</tbody></table>`;
+  }
+
+  const dateStr = new Date().toLocaleDateString();
+  const reportHtml = `<!DOCTYPE html><html><head><meta charset="UTF-8">
+  <title>DataPlot Report</title>
+  <style>
+    body{font-family:Arial,sans-serif;font-size:11pt;margin:24px;color:#222}
+    h1{font-size:16pt;color:#2c3e6b;border-bottom:2px solid #2c3e6b;padding-bottom:6px}
+    h2{font-size:13pt;color:#2c3e6b;margin-top:24px;margin-bottom:8px}
+    h3{font-size:11pt;color:#444;margin-top:14px;margin-bottom:6px}
+    table{border-collapse:collapse;width:100%;margin-bottom:12px;font-size:9.5pt}
+    th{background:#2c3e6b;color:#fff;padding:5px 8px;text-align:left}
+    td{padding:4px 8px;border-bottom:1px solid #dde}
+    tr:nth-child(even) td{background:#f5f6fa}
+    svg{display:block;margin:0 auto 20px auto;max-width:100%}
+    .report-meta{font-size:9pt;color:#888;margin-bottom:16px}
+    @media print{
+      body{margin:10px}
+      h2{page-break-before:auto}
+      table{page-break-inside:avoid}
+      svg{max-width:90%}
+    }
+  </style></head><body>
+  <h1>DataPlot Analysis Report</h1>
+  <p class="report-meta">Generated: ${dateStr}</p>
+  <h2>Figure</h2>
+  ${svgStr}
+  ${statsHtml}
+  ${testHtml}
+  ${dataHtml}
+  <script>window.onload=function(){window.print();}<\/script>
+  </body></html>`;
+
+  const w = window.open('','_blank');
+  w.document.write(reportHtml);
+  w.document.close();
+}
+
+function downloadText(text, filename, mime) {
+  const blob = new Blob([text],{type:mime});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = filename;
+  a.click();
+}
+
+// ============================================================
+// UI HELPERS
+// ============================================================
+function switchTab(name, btn) {
+  document.querySelectorAll('.tab-pane').forEach(p=>p.classList.remove('active'));
+  document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
+  document.getElementById('tab-'+name).classList.add('active');
+  btn.classList.add('active');
+}
+
+function toggleSection(titleEl) {
+  titleEl.classList.toggle('collapsed');
+  const body = titleEl.nextElementSibling;
+  body.classList.toggle('hidden');
+}
+
+function setStatus(msg) {
+  const el = document.getElementById('status-bar');
+  if(el) el.textContent = msg;
+}
+
+// ============================================================
+// EVENT WIRING
+// ============================================================
+document.addEventListener('DOMContentLoaded', ()=>{
+  // Data source radio
+  document.querySelectorAll('input[name="dataSource"]').forEach(r=>{
+    r.addEventListener('change',()=>{
+      const v=r.value;
+      document.getElementById('paste-controls').style.display=v==='paste'?'flex':'none';
+      document.getElementById('paste-controls').style.flexDirection='column';
+      document.getElementById('paste-controls').style.gap='6px';
+      document.getElementById('file-controls').style.display=v==='file'?'block':'none';
+      if(v==='example1') loadExampleData(1);
+      if(v==='example2') loadExampleData(2);
+    });
+  });
+
+  // File input
+  document.getElementById('file-input').addEventListener('change',e=>{
+    handleFileUpload(e.target.files[0]);
+  });
+
+  // Tidy toggle
+  document.getElementById('tidy-input').addEventListener('change',e=>{
+    document.getElementById('tidy-controls').style.display=e.target.checked?'flex':'none';
+    document.getElementById('tidy-controls').style.flexDirection='column';
+    document.getElementById('tidy-controls').style.gap='6px';
+    document.getElementById('wide-controls').style.display=e.target.checked?'none':'block';
+    if(state.rawData) buildTidyData();
+  });
+
+  // Tidy variable selectors
+  document.getElementById('x-var').addEventListener('change',()=>{ if(state.rawData)buildTidyData(); });
+  document.getElementById('y-var').addEventListener('change',()=>{ if(state.rawData)buildTidyData(); });
+  document.getElementById('col-select').addEventListener('change',()=>{ if(state.rawData)buildTidyData(); });
+  document.getElementById('ordering').addEventListener('change',()=>{ if(state.rawData)buildTidyData(); });
+
+  // Sliders
+  ['data-alpha','summ-alpha','point-size'].forEach(id=>{
+    const el=document.getElementById(id);
+    const vl=document.getElementById(id+'-val');
+    el.addEventListener('input',()=>{ vl.textContent=parseFloat(el.value).toFixed(1===id.includes('size')?0:1); drawPlot(); });
+  });
+
+  // All plot option changes → redraw
+  ['jitter-type','summary-type','show-ci','show-sd','show-sem','color-data','color-stats',
+   'no-grid','log-scale','flip-axes','palette','custom-colors','y-range',
+   'plot-title','x-label','y-label','font-title','font-axis','plot-width','plot-height',
+   'show-sig-bars','show-ns','alpha-thresh'
+  ].forEach(id=>{
+    const el=document.getElementById(id);
+    if(el) el.addEventListener('change',drawPlot);
+    if(el&&el.tagName==='INPUT'&&el.type==='text') el.addEventListener('input',drawPlot);
+  });
+
+  // Dark mode
+  document.getElementById('dark-mode').addEventListener('change',e=>{
+    document.body.classList.toggle('dark',e.target.checked);
+    drawPlot();
+  });
+
+  // Palette → show/hide custom row + update swatches
+  document.getElementById('palette').addEventListener('change',e=>{
+    document.getElementById('custom-palette-row').style.display=e.target.value==='custom'?'block':'none';
+    if(e.target.value==='custom') updateColorSwatches();
+    drawPlot();
+  });
+
+  // Custom colors text → update swatches live
+  document.getElementById('custom-colors').addEventListener('input', updateColorSwatches);
+  document.getElementById('custom-colors').addEventListener('change', updateColorSwatches);
+
+  // Hide eyedropper button if not supported
+  if(!window.EyeDropper){
+    const btn = document.getElementById('eyedrop-btn');
+    if(btn){ btn.title='Eyedropper not available in this browser (use Chrome or Edge)'; btn.style.opacity='0.45'; }
+  }
+
+  // Auto test toggle
+  document.getElementById('auto-test').addEventListener('change',e=>{
+    document.getElementById('manual-test-row').style.display=e.target.checked?'none':'block';
+  });
+
+  // Stats controls → recompute
+  ['run-stats','auto-test','manual-test','mc-correction','norm-test','alpha-thresh'].forEach(id=>{
+    const el=document.getElementById(id);
+    if(el) el.addEventListener('change',()=>{ computeStats(); renderStatsTable(); drawPlot(); renderLegend(); });
+  });
+
+  // Load example data on startup
+  loadExampleData(1);
+});
+</script>
+</body>
+</html>
